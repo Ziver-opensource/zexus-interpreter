@@ -19,12 +19,17 @@ def builtin_first(*args): # NEW
         return list_obj.elements[0]
     return NULL
 
-def builtin_last(*args): # NEW
-    if len(args) != 1 or not isinstance(args[0], List): return NULL
-    list_obj = args[0]
-    if len(list_obj.elements) > 0:
-        return list_obj.elements[-1]
-    return NULL
+# In evaluator.py - update builtin_string function
+def builtin_string(*args): # NEW
+    if len(args) != 1: return NULL
+    arg = args[0]
+    if isinstance(arg, Integer): return String(str(arg.value))
+    elif isinstance(arg, Float): return String(str(arg.value))
+    elif isinstance(arg, String): return arg
+    elif isinstance(arg, Boolean): return String("true" if arg.value else "false")  # ✅ FIXED
+    elif isinstance(arg, Map): return String(arg.inspect())
+    elif isinstance(arg, List): return String(arg.inspect())
+    return String("unknown")
 
 def builtin_rest(*args): # NEW
     if len(args) != 1 or not isinstance(args[0], List): return NULL
