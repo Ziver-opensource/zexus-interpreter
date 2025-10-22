@@ -1,4 +1,4 @@
-# parser.py (UPDATED WITH IF/ELSE AND WHILE LOOPS)
+# parser.py (COMPLETELY FIXED - CORRECT INDENTATION)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -169,110 +169,108 @@ class Parser:
         # print(f"DEBUG: Parameters completed: {[p.value for p in params]}")
         return params
 
-    # NEW: If statement parsing (Zexus syntax: if condition: consequence else: alternative)
+    # NEW: If statement parsing (Zexus syntax: if (condition): consequence else: alternative)
+    def parse_if_statement(self):
+        # print(f"DEBUG: parse_if_statement - starting at {self.cur_token.type}")
 
-   # In parser.py - REPLACE the parse_if_statement and parse_while_statement methods:
+        # We're at IF token
+        # Zexus syntax: if (condition): consequence else: alternative
 
-def parse_if_statement(self):
-    # print(f"DEBUG: parse_if_statement - starting at {self.cur_token.type}")
-    
-    # We're at IF token
-    # Zexus syntax: if (condition): consequence else: alternative
-    
-    # Parse condition
-    if not self.expect_peek(LPAREN):
-        self.errors.append("Expected '(' after 'if'")
-        return None
-        
-    self.next_token()  # Move past '('
-    condition = self.parse_expression(LOWEST)
-    if condition is None:
-        self.errors.append("Failed to parse if condition")
-        return None
-        
-    if not self.expect_peek(RPAREN):
-        self.errors.append("Expected ')' after if condition")
-        return None
-        
-    # ✅ FIX: Expect ':' after condition (Zexus syntax)
-    if not self.expect_peek(COLON):
-        self.errors.append("Expected ':' after if condition")
-        return None
-        
-    # Parse consequence
-    consequence = BlockStatement()
-    self.next_token()  # Move past ':'
-    
-    stmt = self.parse_statement()
-    if stmt:
-        consequence.statements.append(stmt)
-        
-    # Parse else clause (optional)
-    alternative = None
-    if self.peek_token_is(ELSE):
-        self.next_token()  # consume 'else'
-        
-        # Check for 'else if'
-        if self.peek_token_is(IF):
-            self.next_token()  # consume 'if'
-            alternative = self.parse_if_statement()
-        else:
-            # Regular else - expect ':' (Zexus syntax)
-            if not self.expect_peek(COLON):
-                self.errors.append("Expected ':' after 'else'")
-                return None
-                
-            alternative = BlockStatement()
-            self.next_token()  # Move past ':'
-            
-            stmt = self.parse_statement()
-            if stmt:
-                alternative.statements.append(stmt)
-    
-    return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+        # Parse condition
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'if'")
+            return None
 
-def parse_while_statement(self):
-    # print(f"DEBUG: parse_while_statement - starting at {self.cur_token.type}")
-    
-    # We're at WHILE token
-    # Zexus syntax: while (condition): body
-    
-    # Parse condition
-    if not self.expect_peek(LPAREN):
-        self.errors.append("Expected '(' after 'while'")
-        return None
-        
-    self.next_token()  # Move past '('
-    condition = self.parse_expression(LOWEST)
-    if condition is None:
-        self.errors.append("Failed to parse while condition")
-        return None
-        
-    if not self.expect_peek(RPAREN):
-        self.errors.append("Expected ')' after while condition")
-        return None
-        
-    # ✅ FIX: Expect ':' after condition (Zexus syntax)
-    if not self.expect_peek(COLON):
-        self.errors.append("Expected ':' after while condition")
-        return None
-        
-    # Parse body
-    body = BlockStatement()
-    self.next_token()  # Move past ':'
-    
-    stmt = self.parse_statement()
-    if stmt:
-        body.statements.append(stmt)
-        
-    return WhileStatement(condition=condition, body=body)
+        self.next_token()  # Move past '('
+        condition = self.parse_expression(LOWEST)
+        if condition is None:
+            self.errors.append("Failed to parse if condition")
+            return None
+
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after if condition")
+            return None
+
+        # ✅ FIX: Expect ':' after condition (Zexus syntax)
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' after if condition")
+            return None
+
+        # Parse consequence
+        consequence = BlockStatement()
+        self.next_token()  # Move past ':'
+
+        stmt = self.parse_statement()
+        if stmt:
+            consequence.statements.append(stmt)
+
+        # Parse else clause (optional)
+        alternative = None
+        if self.peek_token_is(ELSE):
+            self.next_token()  # consume 'else'
+
+            # Check for 'else if'
+            if self.peek_token_is(IF):
+                self.next_token()  # consume 'if'
+                alternative = self.parse_if_statement()
+            else:
+                # Regular else - expect ':' (Zexus syntax)
+                if not self.expect_peek(COLON):
+                    self.errors.append("Expected ':' after 'else'")
+                    return None
+
+                alternative = BlockStatement()
+                self.next_token()  # Move past ':'
+
+                stmt = self.parse_statement()
+                if stmt:
+                    alternative.statements.append(stmt)
+
+        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+
+    # NEW: While loop parsing (Zexus syntax: while (condition): body)
+    def parse_while_statement(self):
+        # print(f"DEBUG: parse_while_statement - starting at {self.cur_token.type}")
+
+        # We're at WHILE token
+        # Zexus syntax: while (condition): body
+
+        # Parse condition
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'while'")
+            return None
+
+        self.next_token()  # Move past '('
+        condition = self.parse_expression(LOWEST)
+        if condition is None:
+            self.errors.append("Failed to parse while condition")
+            return None
+
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after while condition")
+            return None
+
+        # ✅ FIX: Expect ':' after condition (Zexus syntax)
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' after while condition")
+            return None
+
+        # Parse body
+        body = BlockStatement()
+        self.next_token()  # Move past ':'
+
+        stmt = self.parse_statement()
+        if stmt:
+            body.statements.append(stmt)
+
+        return WhileStatement(condition=condition, body=body)
 
     def parse_action_literal(self):
         # print(f"DEBUG: parse_action_literal at {self.cur_token.type}")
-        
+
         if not self.expect_peek(LPAREN):
             return None
-            
+
         parameters = self.parse_action_parameters()
         if parameters is None:
             return None
@@ -286,10 +284,9 @@ def parse_while_statement(self):
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
-            
+
         return ActionLiteral(parameters=parameters, body=body)
 
-    # ... (rest of existing methods remain the same) ...
     def parse_screen_statement(self):
         stmt = ScreenStatement(name=None, body=None)
         if not self.expect_peek(IDENT):
