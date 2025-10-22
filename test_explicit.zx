@@ -1,0 +1,6 @@
+let my_func = action():
+    return "explicit_works"
+
+print "Calling my_func:"
+let result = my_func()
+print "Result: " + result

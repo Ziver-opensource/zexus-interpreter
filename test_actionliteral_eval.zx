@@ -1,0 +1,7 @@
+# Test what ActionLiteral evaluates to directly
+let test_func = action(): return "hello"
+print "Function object: " + str(test_func)
+
+# Also test calling it directly
+let result = (action(): return "direct_call")()
+print "Direct call result: " + result

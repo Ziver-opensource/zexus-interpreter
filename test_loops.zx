@@ -1,0 +1,20 @@
+print "=== LOOP TEST ==="
+
+# For each loop (already implemented, let's test it)
+action sum_list(numbers):
+    let total = 0
+    for each num in numbers:
+        total = total + num
+    return total
+
+print sum_list([1, 2, 3, 4, 5])
+
+# While loop (need to implement)
+action countdown(n):
+    let count = n
+    while count > 0:
+        print count
+        count = count - 1
+    return "Blastoff!"
+
+print countdown(3)

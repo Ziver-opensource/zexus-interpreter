@@ -1,0 +1,12 @@
+{
+  "name": "testing",
+  "version": "yes",
+  "description": "nothing but testing",
+  "author": "zaidu abububakar",
+  "main": "test.zx",
+  "scripts": {
+    "start": "zx test.zx",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {}
+}

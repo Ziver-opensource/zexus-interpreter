@@ -1,0 +1,54 @@
+print "=== IF/ELSE AND WHILE LOOPS TEST ==="
+
+# Test if/else - using brace syntax that parser expects
+action check_age(age):
+    if (age >= 18) {
+        return "Adult"
+    } else {
+        return "Minor"
+    }
+
+print check_age(25)
+print check_age(15)
+
+# Test else if with brace syntax
+action grade_score(score):
+    if (score >= 90) {
+        return "A"
+    } else if (score >= 80) {
+        return "B"
+    } else if (score >= 70) {
+        return "C"
+    } else {
+        return "F"
+    }
+
+print grade_score(95)
+print grade_score(85)
+print grade_score(75)
+print grade_score(65)
+
+# Test while loops with brace syntax
+action countdown(n):
+    let count = n
+    while (count > 0) {
+        print count
+        count = count - 1
+    }
+    return "Blastoff!"
+
+print countdown(3)
+
+# Test nested control flow
+action factorial(n):
+    let result = 1
+    let i = n
+    while (i > 1) {
+        result = result * i
+        i = i - 1
+    }
+    return result
+
+print factorial(5)
+
+print "All control flow tests passed! 🎉"

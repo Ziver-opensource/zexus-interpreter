@@ -1,0 +1,23 @@
+print "=== DATA STRUCTURES TEST ==="
+
+# Arrays/Lists
+let fruits = ["apple", "banana", "orange"]
+print fruits
+print len(fruits)
+print first(fruits)
+
+# Objects/Maps  
+let person = {
+    "name": "Alice",
+    "age": 30,
+    "city": "Wonderland"
+}
+print person
+print map_get(person, "name")
+
+# Complex structures
+let users = [
+    {"name": "Bob", "score": 85},
+    {"name": "Charlie", "score": 92}
+]
+print users

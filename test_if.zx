@@ -1,0 +1,18 @@
+# This is a test for our if/else statements
+
+if (10 > 5) {
+  # This block should run
+  print "10 is greater than 5 is true!"
+}
+
+if (1 > 10) {
+  # This block should NOT run
+  print "This message should never appear."
+} else {
+  # This block should run
+  print "The else block works correctly!"
+}
+
+if (6 > 3) {
+  print "6 is greater than 5 is true!"
+}

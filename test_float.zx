@@ -1,0 +1,16 @@
+# Test floating-point numbers
+let int_num = 10
+let float_num = 3.14
+let sum = int_num + float_num
+print "Integer + Float: " + string(sum)
+
+let division = 10.0 / 3.0
+print "Float division: " + string(division)
+
+let mixed_math = (5 + 2.5) * 2
+print "Mixed math: " + string(mixed_math)
+
+# Test comparisons
+print "5.5 > 3: " + string(5.5 > 3)
+print "2.0 == 2: " + string(2.0 == 2)
+EOF

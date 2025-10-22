@@ -1,0 +1,16 @@
+print "=== TESTING ACTION FIX ==="
+
+# Test 1: Simple function definition and call
+action simplest():
+    return "function_works"
+
+print "Function defined successfully"
+let result = simplest()
+print "Function call result: " + result
+
+# Test 2: Function with parameters
+action greet(name):
+    return "Hello, " + name
+
+print greet("Zexus")
+print "All tests passed!"

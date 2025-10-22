@@ -1,0 +1,3 @@
+# Minimal test - just function definition
+action simplest():
+    return "works"

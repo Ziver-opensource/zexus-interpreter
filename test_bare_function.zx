@@ -1,0 +1,6 @@
+action simplest():
+    return "function_works"
+
+print "Calling simplest:"
+let result = simplest()
+print "Result: " + result

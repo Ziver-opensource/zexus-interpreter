@@ -1,0 +1,14 @@
+let user = {"name": "Zaidu", "age": 25, "active": true}
+print "User map: " + string(user)
+
+let name = map_get(user, "name")
+print "User name: " + string(name)
+
+# Update map
+map_set(user, "age", 26)
+map_set(user, "country", "Nigeria")
+print "Updated user: " + string(user)
+
+let keys = map_keys(user)
+print "User keys: " + string(keys)
+EOF

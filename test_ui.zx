@@ -1,0 +1,6 @@
+# test_ui.zx
+
+screen Main {
+  # This is the body of our first UI screen.
+  # For now, it's empty, but the interpreter will render the window.
+}
