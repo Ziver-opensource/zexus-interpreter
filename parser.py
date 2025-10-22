@@ -1,4 +1,4 @@
-# parser.py (CLEAN WORKING VERSION)
+# parser.py (COMPLETE FIXED VERSION WITH ALL METHODS)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -9,7 +9,6 @@ precedences = {
     PLUS: SUM, MINUS: SUM, SLASH: PRODUCT, STAR: PRODUCT,
     LPAREN: CALL,
 }
-
 
 class Parser:
     def __init__(self, lexer):
@@ -49,7 +48,6 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    # === PROGRAM ENTRY ===
     def parse_program(self):
         program = Program()
         while not self.cur_token_is(EOF):
@@ -59,7 +57,6 @@ class Parser:
             self.next_token()
         return program
 
-    # === STATEMENT DISPATCH ===
     def parse_statement(self):
         if self.cur_token_is(LET):
             # Check for embedded code block
@@ -122,6 +119,23 @@ class Parser:
         if not self.expect_peek(RPAREN):
             return None
         return params
+
+    # === ACTION LITERAL (MISSING METHOD) ===
+    def parse_action_literal(self):
+        # For: let f = action(params): body
+        if not self.expect_peek(LPAREN):
+            return None
+        parameters = self.parse_action_parameters()
+        if parameters is None:
+            return None
+        if not self.expect_peek(COLON):
+            return None
+        body = BlockStatement()
+        self.next_token()
+        stmt = self.parse_statement()
+        if stmt:
+            body.statements.append(stmt)
+        return ActionLiteral(parameters=parameters, body=body)
 
     # === IF STATEMENTS ===
     def parse_if_statement(self):
