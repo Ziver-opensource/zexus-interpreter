@@ -30,7 +30,19 @@ class ForEachStatement(Statement):
     def __init__(self, item, iterable, body):
         self.item = item; self.iterable = iterable; self.body = body
 
-# Add these new AST nodes to zexus_ast.py
+# Add these to zexus_ast.py
+
+class EmbeddedCodeStatement(Statement):
+    def __init__(self, name, language, code):
+        self.name = name  # Identifier for the embedded block
+        self.language = language  # String: "javascript", "python", etc.
+        self.code = code  # String: the raw code
+
+class UseStatement(Statement):
+    def __init__(self, embedded_ref, method, arguments):
+        self.embedded_ref = embedded_ref  # Identifier pointing to embedded block
+        self.method = method  # String: method/function to call
+        self.arguments = arguments  # List of expressions
 
 # NEW: If statement node (different from IfExpression)
 class IfStatement(Statement):
