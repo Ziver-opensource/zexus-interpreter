@@ -53,6 +53,20 @@ class Map(Object):
             pairs.append(f"{key_str}: {value_str}")
         return "{" + ", ".join(pairs) + "}"
 
+# Add to object.py
+
+class EmbeddedCode(Object):
+    def __init__(self, name, language, code):
+        self.name = name
+        self.language = language
+        self.code = code
+        
+    def inspect(self):
+        return f"<embedded {self.language} code: {self.name}>"
+        
+    def type(self):
+        return "EMBEDDED_CODE"
+
 class ReturnValue(Object):
     def __init__(self, value): self.value = value
     def inspect(self): return self.value.inspect()
