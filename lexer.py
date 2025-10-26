@@ -1,4 +1,4 @@
-# lexer.py (FIXED - Add missing characters)
+# lexer.py (IMPROVED EMBEDDED CODE HANDLING)
 from zexus_token import *
 
 class Lexer:
@@ -7,6 +7,7 @@ class Lexer:
         self.position = 0
         self.read_position = 0
         self.ch = ""
+        self.in_embedded_block = False  # Track if we're in embedded code
         self.read_char()
 
     def read_char(self):
@@ -25,14 +26,14 @@ class Lexer:
 
     def next_token(self):
         self.skip_whitespace()
-        
+
         # Skip single line comments
         if self.ch == '#' and self.peek_char() != '{':
             self.skip_comment()
             return self.next_token()
-            
+
         tok = None
-        
+
         if self.ch == '=':
             if self.peek_char() == '=':
                 ch = self.ch
@@ -64,8 +65,14 @@ class Lexer:
         elif self.ch == ')':
             tok = Token(RPAREN, self.ch)
         elif self.ch == '{':
+            # Check if this might be start of embedded block
+            lookback = self.input[max(0, self.position-10):self.position]
+            if 'embedded' in lookback:
+                self.in_embedded_block = True
             tok = Token(LBRACE, self.ch)
         elif self.ch == '}':
+            if self.in_embedded_block:
+                self.in_embedded_block = False
             tok = Token(RBRACE, self.ch)
         elif self.ch == ',':
             tok = Token(COMMA, self.ch)
@@ -81,16 +88,22 @@ class Lexer:
             tok = Token(STAR, self.ch)
         elif self.ch == '/':
             tok = Token(SLASH, self.ch)
-        elif self.ch == '%':  # ✅ ADD MODULO OPERATOR
+        elif self.ch == '%':
             tok = Token(MOD, self.ch)
-        elif self.ch == '.':  # ✅ ADD DOT OPERATOR
+        elif self.ch == '.':
             tok = Token(DOT, self.ch)
         elif self.ch == "":
             tok = Token(EOF, "")
         else:
             if self.is_letter(self.ch):
                 literal = self.read_identifier()
-                token_type = self.lookup_ident(literal)
+                
+                # ✅ FIX: In embedded blocks, treat all keywords as IDENT
+                if self.in_embedded_block:
+                    token_type = IDENT
+                else:
+                    token_type = self.lookup_ident(literal)
+                    
                 return Token(token_type, literal)
             elif self.is_digit(self.ch):
                 num_literal = self.read_number()
@@ -99,13 +112,11 @@ class Lexer:
                 else:
                     return Token(INT, num_literal)
             else:
-                # Instead of ILLEGAL, try to read as string or skip
                 if self.ch in ['\n', '\r']:
                     self.read_char()
                     return self.next_token()
-                # For embedded code, treat unknown chars as IDENT to avoid breaking
+                # For embedded code, treat unknown printable chars as IDENT
                 if self.ch.isprintable():
-                    # Read as identifier for embedded code compatibility
                     literal = self.read_embedded_char()
                     return Token(IDENT, literal)
                 tok = Token(ILLEGAL, self.ch)
