@@ -25,47 +25,65 @@ class Lexer:
             return self.input[self.read_position]
 
     def next_token(self):
-        self.skip_whitespace()
+    self.skip_whitespace()
 
-        # Skip single line comments
-        if self.ch == '#' and self.peek_char() != '{':
-            self.skip_comment()
-            return self.next_token()
+    # Skip single line comments
+    if self.ch == '#' and self.peek_char() != '{':
+        self.skip_comment()
+        return self.next_token()
 
-        tok = None
+    tok = None
 
-        if self.ch == '=':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(EQ, literal)
-            else:
-                tok = Token(ASSIGN, self.ch)
-        elif self.ch == '!':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(NOT_EQ, literal)
-            else:
-                tok = Token(BANG, self.ch)
-        elif self.ch == '<':
-            if self.peek_char() == '=':  # ✅ ADD <= operator
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(LTE, literal)
-            else:
-                tok = Token(LT, self.ch)
-        elif self.ch == '>':
-            if self.peek_char() == '=':  # ✅ ADD >= operator
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(GTE, literal)
-            else:
-                tok = Token(GT, self.ch)
+    if self.ch == '=':
+        if self.peek_char() == '=':
+            ch = self.ch
+            self.read_char()
+            literal = ch + self.ch
+            tok = Token(EQ, literal)
+        else:
+            tok = Token(ASSIGN, self.ch)
+    elif self.ch == '!':
+        if self.peek_char() == '=':
+            ch = self.ch
+            self.read_char()
+            literal = ch + self.ch
+            tok = Token(NOT_EQ, literal)
+        else:
+            tok = Token(BANG, self.ch)
+    # ✅ ADD logical AND operator
+    elif self.ch == '&':
+        if self.peek_char() == '&':
+            ch = self.ch
+            self.read_char()
+            literal = ch + self.ch
+            tok = Token(AND, literal)
+        else:
+            tok = Token(ILLEGAL, self.ch)
+    # ✅ ADD logical OR operator  
+    elif self.ch == '|':
+        if self.peek_char() == '|':
+            ch = self.ch
+            self.read_char()
+            literal = ch + self.ch
+            tok = Token(OR, literal)
+        else:
+            tok = Token(ILLEGAL, self.ch)
+    elif self.ch == '<':
+        if self.peek_char() == '=':  # ✅ ADD <= operator
+            ch = self.ch
+            self.read_char()
+            literal = ch + self.ch
+            tok = Token(LTE, literal)
+        else:
+            tok = Token(LT, self.ch)
+    elif self.ch == '>':
+        if self.peek_char() == '=':  # ✅ ADD >= operator
+            ch = self.ch
+            self.read_char()
+            literal = ch + self.ch
+            tok = Token(GTE, literal)
+        else:
+            tok = Token(GT, self.ch)
         elif self.ch == '"':
             tok = Token(STRING, self.read_string())
         elif self.ch == '[':
