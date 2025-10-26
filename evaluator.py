@@ -1,8 +1,8 @@
-# evaluator.py (COMPLETE FIXED VERSION WITH COMPARISON OPERATORS)
-from zexus_ast import *
-from object import *
+# evaluator.py - FIXED IMPORT
+from zexus_ast import *  # This imports Boolean AST node
+from object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue
 
-NULL, TRUE, FALSE = Null(), Boolean(True), Boolean(False)
+NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
 
 # === HELPER FUNCTIONS ===
 
