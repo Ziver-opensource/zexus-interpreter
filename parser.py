@@ -45,7 +45,22 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    # ... rest of your parser code remains the same ...
+    def parse_method_call_expression(self, left):
+        """Parse: object.method(arguments)"""
+        if not self.cur_token_is(DOT):
+            return None
+            
+        if not self.expect_peek(IDENT):
+            return None
+            
+        method = Identifier(self.cur_token.literal)
+        
+        if not self.expect_peek(LPAREN):
+            return None
+            
+        arguments = self.parse_expression_list(RPAREN)
+        
+        return MethodCallExpression(object=left, method=method, arguments=arguments)
 
     def parse_program(self):
         program = Program()
