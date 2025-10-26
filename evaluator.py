@@ -1,7 +1,16 @@
-# evaluator.py - FIX THE IMPORTS AT THE TOP
+# evaluator.py - FIXED IMPORTS
 
 # Import zexus_ast module to access AST node classes
 import zexus_ast
+
+# Import specific AST classes we need
+from zexus_ast import (
+    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement, 
+    ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
+    EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
+    ExactlyStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
+    ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression
+)
 
 # Import object classes with alias to avoid name conflict
 from object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue
