@@ -27,6 +27,8 @@ MOD = "%"      # Modulo operator
 DOT = "."      # Dot operator for method calls
 LTE = "<="      # Less than or equal
 GTE = ">="      # Greater than or equal
+AND = "&&"
+OR = "||"
 
 # Delimiters
 COMMA = ","
