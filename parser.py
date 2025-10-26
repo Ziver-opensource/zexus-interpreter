@@ -17,21 +17,17 @@ class Parser:
         self.cur_token = None
         self.peek_token = None
 
-        self.prefix_parse_fns = {
-            IDENT: self.parse_identifier,
-            INT: self.parse_integer_literal,
-            FLOAT: self.parse_float_literal,
-            STRING: self.parse_string_literal,
-            BANG: self.parse_prefix_expression,
-            MINUS: self.parse_prefix_expression,
-            TRUE: self.parse_boolean,
-            FALSE: self.parse_boolean,
-            LPAREN: self.parse_grouped_expression,
-            IF: self.parse_if_expression,
-            LBRACKET: self.parse_list_literal,
-            LBRACE: self.parse_map_literal,
-            ACTION: self.parse_action_literal,
-            EMBEDDED: self.parse_embedded_literal,  # ✅ ADD THIS LINE
+        self.infix_parse_fns = {
+            PLUS: self.parse_infix_expression,
+            MINUS: self.parse_infix_expression,
+            SLASH: self.parse_infix_expression,
+            STAR: self.parse_infix_expression,
+            EQ: self.parse_infix_expression,
+            NOT_EQ: self.parse_infix_expression,
+            LT: self.parse_infix_expression,
+            GT: self.parse_infix_expression,
+            LPAREN: self.parse_call_expression,
+            DOT: self.parse_method_call_expression,  # ✅ ADD THIS
         }
 
         self.infix_parse_fns = {
