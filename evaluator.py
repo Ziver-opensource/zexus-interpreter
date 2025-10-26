@@ -1,10 +1,177 @@
-# evaluator.py (COMPLETE FIXED VERSION WITH IF/WHILE SUPPORT)
+# evaluator.py (COMPLETE WITH MISSING FUNCTIONS)
 from zexus_ast import *
 from object import *
 
 NULL, TRUE, FALSE = Null(), Boolean(True), Boolean(False)
 
-# --- Updated Built-in Functions Section ---
+# === MISSING HELPER FUNCTIONS ===
+
+def eval_program(statements, env):
+    result = NULL
+    for stmt in statements:
+        result = eval_node(stmt, env)
+        if isinstance(result, ReturnValue):
+            return result.value
+    return result
+
+def eval_block_statement(block, env):
+    result = NULL
+    for stmt in block.statements:
+        result = eval_node(stmt, env)
+        if isinstance(result, ReturnValue):
+            return result
+    return result
+
+def eval_expressions(expressions, env):
+    results = []
+    for expr in expressions:
+        result = eval_node(expr, env)
+        if isinstance(result, ReturnValue):
+            return result
+        results.append(result)
+    return results
+
+def eval_identifier(node, env):
+    val = env.get(node.value)
+    if val:
+        return val
+    # Check builtins
+    builtin = builtins.get(node.value)
+    if builtin:
+        return builtin
+    print(f"Identifier not found: {node.value}")
+    return NULL
+
+def is_truthy(obj):
+    if obj == NULL or obj == FALSE:
+        return False
+    return True
+
+def eval_prefix_expression(operator, right):
+    if operator == "!":
+        return eval_bang_operator_expression(right)
+    elif operator == "-":
+        return eval_minus_prefix_operator_expression(right)
+    return NULL
+
+def eval_bang_operator_expression(right):
+    if right == TRUE:
+        return FALSE
+    elif right == FALSE:
+        return TRUE
+    elif right == NULL:
+        return TRUE
+    return FALSE
+
+def eval_minus_prefix_operator_expression(right):
+    if isinstance(right, Integer):
+        return Integer(-right.value)
+    elif isinstance(right, Float):
+        return Float(-right.value)
+    return NULL
+
+def eval_infix_expression(operator, left, right):
+    if isinstance(left, Integer) and isinstance(right, Integer):
+        return eval_integer_infix_expression(operator, left, right)
+    elif isinstance(left, Float) and isinstance(right, Float):
+        return eval_float_infix_expression(operator, left, right)
+    elif isinstance(left, String) and isinstance(right, String):
+        return eval_string_infix_expression(operator, left, right)
+    elif operator == "==":
+        return TRUE if left.value == right.value else FALSE
+    elif operator == "!=":
+        return TRUE if left.value != right.value else FALSE
+    return NULL
+
+def eval_integer_infix_expression(operator, left, right):
+    left_val = left.value
+    right_val = right.value
+    
+    if operator == "+":
+        return Integer(left_val + right_val)
+    elif operator == "-":
+        return Integer(left_val - right_val)
+    elif operator == "*":
+        return Integer(left_val * right_val)
+    elif operator == "/":
+        return Integer(left_val // right_val)
+    elif operator == "<":
+        return TRUE if left_val < right_val else FALSE
+    elif operator == ">":
+        return TRUE if left_val > right_val else FALSE
+    elif operator == "==":
+        return TRUE if left_val == right_val else FALSE
+    elif operator == "!=":
+        return TRUE if left_val != right_val else FALSE
+    return NULL
+
+def eval_float_infix_expression(operator, left, right):
+    left_val = left.value
+    right_val = right.value
+    
+    if operator == "+":
+        return Float(left_val + right_val)
+    elif operator == "-":
+        return Float(left_val - right_val)
+    elif operator == "*":
+        return Float(left_val * right_val)
+    elif operator == "/":
+        return Float(left_val / right_val)
+    elif operator == "<":
+        return TRUE if left_val < right_val else FALSE
+    elif operator == ">":
+        return TRUE if left_val > right_val else FALSE
+    elif operator == "==":
+        return TRUE if left_val == right_val else FALSE
+    elif operator == "!=":
+        return TRUE if left_val != right_val else FALSE
+    return NULL
+
+def eval_string_infix_expression(operator, left, right):
+    if operator == "+":
+        return String(left.value + right.value)
+    elif operator == "==":
+        return TRUE if left.value == right.value else FALSE
+    elif operator == "!=":
+        return TRUE if left.value != right.value else FALSE
+    return NULL
+
+def eval_if_expression(ie, env):
+    condition = eval_node(ie.condition, env)
+    if is_truthy(condition):
+        return eval_node(ie.consequence, env)
+    elif ie.alternative:
+        return eval_node(ie.alternative, env)
+    return NULL
+
+def apply_function(fn, args):
+    if isinstance(fn, Action):
+        extended_env = extend_function_env(fn, args)
+        evaluated = eval_node(fn.body, extended_env)
+        return unwrap_return_value(evaluated)
+    elif isinstance(fn, Builtin):
+        return fn.fn(*args)
+    print(f"Not a function: {fn.type()}")
+    return NULL
+
+def extend_function_env(fn, args):
+    env = Environment(outer=fn.env)
+    for param, arg in zip(fn.parameters, args):
+        env.set(param.value, arg)
+    return env
+
+def unwrap_return_value(obj):
+    if isinstance(obj, ReturnValue):
+        return obj.value
+    return obj
+
+def execute_embedded_function(embedded_obj, method, args):
+    # Simplified embedded function execution
+    print(f"[EMBED] Executing {embedded_obj.language}.{method} with args {[arg.inspect() for arg in args]}")
+    # For now, return a dummy value
+    return Integer(42)
+
+# === BUILTIN FUNCTIONS (your existing code) ===
 def builtin_len(*args):
     if len(args) != 1:
         return NULL
@@ -15,8 +182,7 @@ def builtin_len(*args):
         return Integer(len(arg.elements))
     return NULL
 
-
-def builtin_first(*args):  # NEW
+def builtin_first(*args):
     if len(args) != 1 or not isinstance(args[0], List):
         return NULL
     list_obj = args[0]
@@ -24,8 +190,7 @@ def builtin_first(*args):  # NEW
         return list_obj.elements[0]
     return NULL
 
-
-def builtin_string(*args):  # NEW
+def builtin_string(*args):
     if len(args) != 1:
         return NULL
     arg = args[0]
@@ -36,15 +201,14 @@ def builtin_string(*args):  # NEW
     elif isinstance(arg, String):
         return arg
     elif isinstance(arg, Boolean):
-        return String("true" if arg.value else "false")  # ✅ FIXED
+        return String("true" if arg.value else "false")
     elif isinstance(arg, Map):
         return String(arg.inspect())
     elif isinstance(arg, List):
         return String(arg.inspect())
     return String("unknown")
 
-
-def builtin_rest(*args):  # NEW
+def builtin_rest(*args):
     if len(args) != 1 or not isinstance(args[0], List):
         return NULL
     list_obj = args[0]
@@ -53,15 +217,13 @@ def builtin_rest(*args):  # NEW
         return List(new_elements)
     return NULL
 
-
-def builtin_push(*args):  # NEW
+def builtin_push(*args):
     if len(args) != 2 or not isinstance(args[0], List):
         return NULL
     list_obj = args[0]
     new_element = args[1]
     new_elements = list_obj.elements + [new_element]
     return List(new_elements)
-
 
 def builtin_map_get(*args):
     if len(args) != 2:
@@ -71,7 +233,6 @@ def builtin_map_get(*args):
         return NULL
     key_str = key.inspect()
     return map_obj.pairs.get(key_str, NULL)
-
 
 def builtin_map_set(*args):
     if len(args) != 3:
@@ -83,7 +244,6 @@ def builtin_map_set(*args):
     map_obj.pairs[key_str] = value
     return map_obj
 
-
 def builtin_map_keys(*args):
     if len(args) != 1:
         return NULL
@@ -93,11 +253,9 @@ def builtin_map_keys(*args):
     keys = [String(key) for key in map_obj.pairs.keys()]
     return List(keys)
 
-
 builtins = {
     "len": Builtin(builtin_len),
     "first": Builtin(builtin_first),
-    "last": Builtin(builtin_first),  # Assuming builtin_last will be similar
     "rest": Builtin(builtin_rest),
     "push": Builtin(builtin_push),
     "string": Builtin(builtin_string),
@@ -105,10 +263,12 @@ builtins = {
     "map_set": Builtin(builtin_map_set),
     "map_keys": Builtin(builtin_map_keys),
 }
-# --- End of Built-ins Section ---
 
-
+# === MAIN EVAL_NODE FUNCTION (your existing code) ===
 def eval_node(node, env):
+    if node is None:
+        return NULL
+        
     node_type = type(node)
 
     # Statements
@@ -151,8 +311,7 @@ def eval_node(node, env):
                 break
             result = eval_node(node.body, env)
         return result
-   
-    # Add to evaluator.py in eval_node function
+
     elif node_type == EmbeddedLiteral:
         embedded_obj = EmbeddedCode("embedded_block", node.language, node.code)
         return embedded_obj
@@ -182,7 +341,6 @@ def eval_node(node, env):
         result = execute_embedded_function(embedded_obj, node.method, args)
         return result
 
-    # evaluator.py - ADD this case to your eval_node function
     elif node_type == ExactlyStatement:
         print(f"[EXACTLY] Executing exact block '{node.name.value}'")
         return eval_node(node.body, env)
@@ -235,4 +393,5 @@ def eval_node(node, env):
     elif node_type == IfExpression:
         return eval_if_expression(node, env)
 
+    print(f"Unknown node type: {node_type}")
     return NULL
