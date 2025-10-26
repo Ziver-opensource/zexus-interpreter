@@ -362,6 +362,9 @@ def eval_node(node, env):
             result = eval_node(node.body, env)
 
         return result
+   
+    elif node_type == Boolean:
+    return TRUE if node.value else FALSE
 
     elif node_type == MethodCallExpression:
         obj = eval_node(node.object, env)
