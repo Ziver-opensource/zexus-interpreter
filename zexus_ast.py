@@ -97,6 +97,15 @@ class ActionLiteral(Expression): # NEW
         self.parameters = parameters
         self.body = body
 
+# zexus_ast.py - ADD this class to your existing file
+class ExactlyStatement:
+    def __init__(self, name, body):
+        self.name = name
+        self.body = body
+
+    def __repr__(self):
+        return f"ExactlyStatement(name={self.name}, body={self.body})"
+
 class CallExpression(Expression): # NEW
     def __init__(self, function, arguments):
         self.function = function # Identifier or ActionLiteral
