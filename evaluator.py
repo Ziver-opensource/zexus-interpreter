@@ -177,6 +177,11 @@ def eval_node(node, env):
         result = execute_embedded_function(embedded_obj, node.method, args)
         return result
 
+    # evaluator.py - ADD this case to your eval_node function
+    elif node_type == ExactlyStatement:
+        print(f"[EXACTLY] Executing exact block '{node.name.value}'")
+        return eval_node(node.body, env)
+
     # Expressions
     elif node_type == IntegerLiteral:
         return Integer(node.value)
