@@ -14,6 +14,17 @@ def eval_program(statements, env):
             return result.value
     return result
 
+def eval_assignment_expression(left, right):
+    """Handle assignment expressions like: x = 5"""
+    if isinstance(left, Identifier):
+        # For now, we'll handle this in the environment
+        # In a real implementation, you'd update the variable in the environment
+        print(f"[ASSIGN] Would assign {left.value} = {right.inspect()}")
+        return right
+    else:
+        print(f"Error: Cannot assign to {left.type()}")
+        return NULL
+
 def eval_block_statement(block, env):
     result = NULL
     for stmt in block.statements:
@@ -71,6 +82,17 @@ def eval_minus_prefix_operator_expression(right):
     return NULL
 
 def eval_infix_expression(operator, left, right):
+
+    # ✅ ADD assignment operator support at the TOP
+    if operator == "=":
+        return eval_assignment_expression(left, right)
+    
+    # ✅ ADD logical operators next
+    if operator == "&&":
+        return TRUE if is_truthy(left) and is_truthy(right) else FALSE
+    elif operator == "||":
+        return TRUE if is_truthy(left) or is_truthy(right) else FALSE
+    
     if isinstance(left, Integer) and isinstance(right, Integer):
         return eval_integer_infix_expression(operator, left, right)
     elif isinstance(left, Float) and isinstance(right, Float):
