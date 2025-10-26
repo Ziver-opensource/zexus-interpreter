@@ -1,4 +1,4 @@
-# lexer.py (UPDATED VERSION)
+# lexer.py (FIXED - Add missing characters)
 from zexus_token import *
 
 class Lexer:
@@ -81,6 +81,10 @@ class Lexer:
             tok = Token(STAR, self.ch)
         elif self.ch == '/':
             tok = Token(SLASH, self.ch)
+        elif self.ch == '%':  # ✅ ADD MODULO OPERATOR
+            tok = Token(MOD, self.ch)
+        elif self.ch == '.':  # ✅ ADD DOT OPERATOR
+            tok = Token(DOT, self.ch)
         elif self.ch == "":
             tok = Token(EOF, "")
         else:
@@ -99,10 +103,21 @@ class Lexer:
                 if self.ch in ['\n', '\r']:
                     self.read_char()
                     return self.next_token()
+                # For embedded code, treat unknown chars as IDENT to avoid breaking
+                if self.ch.isprintable():
+                    # Read as identifier for embedded code compatibility
+                    literal = self.read_embedded_char()
+                    return Token(IDENT, literal)
                 tok = Token(ILLEGAL, self.ch)
 
         self.read_char()
         return tok
+
+    def read_embedded_char(self):
+        """Read a single character as identifier for embedded code compatibility"""
+        char = self.ch
+        self.read_char()
+        return char
 
     def skip_comment(self):
         while self.ch != '\n' and self.ch != "":
@@ -158,7 +173,7 @@ class Lexer:
             "while": WHILE,
             "use": USE,
             "exactly": EXACTLY,
-            "embedded": EMBEDDED,  # ADD THIS
+            "embedded": EMBEDDED,
         }
         return keywords.get(ident, IDENT)
 
