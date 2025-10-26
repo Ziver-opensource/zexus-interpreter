@@ -301,6 +301,22 @@ def eval_node(node, env):
             
         return result
 
+    # evaluator.py (ADD method call handling)
+# Add to eval_node function:
+
+    elif node_type == MethodCallExpression:
+        obj = eval_node(node.object, env)
+        method_name = node.method.value
+        
+        # Handle embedded code method calls
+        if isinstance(obj, EmbeddedCode):
+            args = eval_expressions(node.arguments, env)
+            return execute_embedded_function(obj, method_name, args)
+        
+        # Handle regular method calls (you can extend this)
+        print(f"Method call on {obj.type()}.{method_name} not implemented yet")
+        return NULL
+
     elif node_type == ReturnStatement:
         val = eval_node(node.return_value, env)
         return ReturnValue(val)
