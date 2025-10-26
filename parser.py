@@ -5,8 +5,10 @@ from zexus_ast import *
 
 LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL = 1, 2, 3, 4, 5, 6, 7
 precedences = {
-    EQ: EQUALS, NOT_EQ: EQUALS, LT: LESSGREATER, GT: LESSGREATER,
-    PLUS: SUM, MINUS: SUM, SLASH: PRODUCT, STAR: PRODUCT,
+    EQ: EQUALS, NOT_EQ: EQUALS, 
+    LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,  # ✅ ADD LTE/GTE
+    PLUS: SUM, MINUS: SUM, 
+    SLASH: PRODUCT, STAR: PRODUCT,
     LPAREN: CALL,
 }
 
@@ -43,6 +45,8 @@ class Parser:
             NOT_EQ: self.parse_infix_expression,
             LT: self.parse_infix_expression,
             GT: self.parse_infix_expression,
+            LTE: self.parse_infix_expression,  # ✅ ADD
+            GTE: self.parse_infix_expression,  # ✅ ADD
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
