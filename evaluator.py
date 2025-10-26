@@ -281,6 +281,26 @@ def eval_node(node, env):
     elif node_type == BlockStatement:
         return eval_block_statement(node, env)
 
+    # evaluator.py (ADD ForEachStatement handling)
+# Add this to your eval_node function:
+
+    elif node_type == ForEachStatement:
+        # Evaluate the iterable
+        iterable = eval_node(node.iterable, env)
+        if not isinstance(iterable, List):
+            print(f"Error: for-each loop expected list, got {iterable.type()}")
+            return NULL
+        
+        result = NULL
+        # For each element in the iterable
+        for element in iterable.elements:
+            # Set the loop variable
+            env.set(node.item.value, element)
+            # Execute the loop body
+            result = eval_node(node.body, env)
+            
+        return result
+
     elif node_type == ReturnStatement:
         val = eval_node(node.return_value, env)
         return ReturnValue(val)
