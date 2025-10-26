@@ -248,7 +248,7 @@ def builtin_string(*args):
         return String(str(arg.value))
     elif isinstance(arg, String):
         return arg
-    elif isinstance(arg, Boolean):
+    elif isinstance(arg, BooleanObj):  # Use the aliased name
         return String("true" if arg.value else "false")
     elif isinstance(arg, Map):
         return String(arg.inspect())
