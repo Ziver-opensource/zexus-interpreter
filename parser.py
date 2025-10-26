@@ -60,9 +60,6 @@ class Parser:
     def parse_statement(self):
         try:
             if self.cur_token_is(LET):
-                # Check for embedded code block syntax: let name {language} ... {}
-                if self.peek_token_is(IDENT) and self.peek_n(2).type == LBRACE:
-                    return self.parse_embedded_code()
                 return self.parse_let_statement()
             elif self.cur_token_is(RETURN):
                 return self.parse_return_statement()
@@ -86,7 +83,6 @@ class Parser:
                 return self.parse_expression_statement()
         except Exception as e:
             self.errors.append(f"Parse error at {self.cur_token}: {str(e)}")
-            # Try to recover by skipping to next statement
             self.recover_to_next_statement()
             return None
 
@@ -144,8 +140,8 @@ class Parser:
         
         return EmbeddedCodeStatement(name, language, code)
 
-    def read_embedded_code(self):
-        """Read embedded code until matching closing brace"""
+    def read_embedded_code_content(self):
+        """Read content between { and } including nested braces"""
         start_position = self.lexer.position
         brace_count = 1  # We already saw the opening {
         
@@ -159,12 +155,37 @@ class Parser:
         if self.cur_token_is(EOF):
             self.errors.append("Unclosed embedded code block")
             return None
-        
-        # Extract the code content (excluding the outer braces)
+        # Extract the content (excluding the outer braces)
         end_position = self.lexer.position - len(self.cur_token.literal)
-        code_content = self.lexer.input[start_position:end_position].strip()
+        content = self.lexer.input[start_position:end_position].strip()
         
-        return code_content
+        return content
+
+    def parse_embedded_literal(self):
+        """Parse: embedded {language code} """
+        if not self.expect_peek(LBRACE):
+            return None
+            
+        self.next_token()  # Move to token after {
+        
+        # Read everything until matching }
+        code_content = self.read_embedded_code_content()
+        if code_content is None:
+            return None
+            
+        # Extract language from first line
+        lines = code_content.strip().split('\n')
+        if not lines:
+            self.errors.append("Empty embedded code block")
+            return None
+            
+        language_line = lines[0].strip()
+        language = language_line if language_line else "unknown"
+        
+        # The actual code is everything after the first line
+        code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+        
+        return EmbeddedLiteral(language=language, code=code)
 
     # === EXACTLY STATEMENT ===
     def parse_exactly_statement(self):
