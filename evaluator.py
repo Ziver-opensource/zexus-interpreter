@@ -1,15 +1,16 @@
-# evaluator.py - FIXED IMPORTS
+# evaluator.py - BETTER IMPORT APPROACH
 
 # Import zexus_ast module to access AST node classes
 import zexus_ast
 
-# Import specific AST classes we need
+# Import specific AST classes we need, with Boolean as AST_Boolean to avoid conflict
 from zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement, 
     ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
     EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
     ExactlyStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
-    ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression
+    ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
+    Boolean as AST_Boolean  # ✅ Import AST Boolean with different name
 )
 
 # Import object classes with alias to avoid name conflict
