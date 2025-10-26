@@ -1,4 +1,4 @@
-# parser.py (FIXED - Add EMBEDDED to prefix_parse_fns)
+# parser.py (COMPLETELY FIXED VERSION)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -17,19 +17,25 @@ class Parser:
         self.cur_token = None
         self.peek_token = None
 
-        self.infix_parse_fns = {
-            PLUS: self.parse_infix_expression,
-            MINUS: self.parse_infix_expression,
-            SLASH: self.parse_infix_expression,
-            STAR: self.parse_infix_expression,
-            EQ: self.parse_infix_expression,
-            NOT_EQ: self.parse_infix_expression,
-            LT: self.parse_infix_expression,
-            GT: self.parse_infix_expression,
-            LPAREN: self.parse_call_expression,
-            DOT: self.parse_method_call_expression,  # ✅ ADD THIS
+        # ✅ FIXED: Add prefix_parse_fns that was missing
+        self.prefix_parse_fns = {
+            IDENT: self.parse_identifier,
+            INT: self.parse_integer_literal,
+            FLOAT: self.parse_float_literal,
+            STRING: self.parse_string_literal,
+            BANG: self.parse_prefix_expression,
+            MINUS: self.parse_prefix_expression,
+            TRUE: self.parse_boolean,
+            FALSE: self.parse_boolean,
+            LPAREN: self.parse_grouped_expression,
+            IF: self.parse_if_expression,
+            LBRACKET: self.parse_list_literal,
+            LBRACE: self.parse_map_literal,
+            ACTION: self.parse_action_literal,
+            EMBEDDED: self.parse_embedded_literal,  # ✅ ADDED
         }
 
+        # ✅ FIXED: Remove duplicate definition
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
             MINUS: self.parse_infix_expression,
@@ -40,6 +46,7 @@ class Parser:
             LT: self.parse_infix_expression,
             GT: self.parse_infix_expression,
             LPAREN: self.parse_call_expression,
+            DOT: self.parse_method_call_expression,  # ✅ ADDED
         }
 
         self.next_token()
@@ -49,17 +56,17 @@ class Parser:
         """Parse: object.method(arguments)"""
         if not self.cur_token_is(DOT):
             return None
-            
+
         if not self.expect_peek(IDENT):
             return None
-            
+
         method = Identifier(self.cur_token.literal)
-        
+
         if not self.expect_peek(LPAREN):
             return None
-            
+
         arguments = self.parse_expression_list(RPAREN)
-        
+
         return MethodCallExpression(object=left, method=method, arguments=arguments)
 
     def parse_program(self):
@@ -102,8 +109,9 @@ class Parser:
 
     def recover_to_next_statement(self):
         """Skip tokens until we find a statement boundary"""
+        # ✅ FIXED: Remove NEWLINE reference since we don't have that token
         while not self.cur_token_is(EOF):
-            if self.cur_token_is(SEMICOLON) or self.cur_token_is(NEWLINE):
+            if self.cur_token_is(SEMICOLON):
                 return
             if self.peek_token_is(LET) or self.peek_token_is(RETURN) or self.peek_token_is(PRINT):
                 return
@@ -114,92 +122,67 @@ class Parser:
         saved_position = self.lexer.position
         saved_read_position = self.lexer.read_position
         saved_ch = self.lexer.ch
-        
+
         tokens = []
         for _ in range(n):
             token = self.lexer.next_token()
             tokens.append(token)
-        
+
         # Restore lexer state
         self.lexer.position = saved_position
         self.lexer.read_position = saved_read_position
         self.lexer.ch = saved_ch
-        
+
         return tokens[-1] if tokens else None
 
-    # === EMBEDDED CODE HANDLING (FIXED) ===
-    def parse_embedded_code(self):
-        """Parse: let name {language} code {} """
-        if not self.expect_peek(IDENT):
-            return None
-        
-        name = Identifier(self.cur_token.literal)
-        
+    # === EMBEDDED CODE HANDLING ===
+    def parse_embedded_literal(self):
+        """Parse: embedded {language code} """
         if not self.expect_peek(LBRACE):
             return None
-        
+
         self.next_token()  # Move to token after {
-        
-        # The language identifier should be here
-        if not self.cur_token_is(IDENT):
-            self.errors.append(f"Expected language identifier after '{{', got {self.cur_token.type} instead")
-            return None
-        
-        language = self.cur_token.literal
-        
+
         # Read everything until matching }
-        code = self.read_embedded_code()
-        if code is None:
+        code_content = self.read_embedded_code_content()
+        if code_content is None:
             return None
-        
-        return EmbeddedCodeStatement(name, language, code)
+
+        # Extract language from first line
+        lines = code_content.strip().split('\n')
+        if not lines:
+            self.errors.append("Empty embedded code block")
+            return None
+
+        language_line = lines[0].strip()
+        language = language_line if language_line else "unknown"
+
+        # The actual code is everything after the first line
+        code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+
+        return EmbeddedLiteral(language=language, code=code)
 
     def read_embedded_code_content(self):
         """Read content between { and } including nested braces"""
         start_position = self.lexer.position
         brace_count = 1  # We already saw the opening {
-        
+
         while brace_count > 0 and not self.cur_token_is(EOF):
             self.next_token()
             if self.cur_token_is(LBRACE):
                 brace_count += 1
             elif self.cur_token_is(RBRACE):
                 brace_count -= 1
-        
+
         if self.cur_token_is(EOF):
             self.errors.append("Unclosed embedded code block")
             return None
+        
         # Extract the content (excluding the outer braces)
         end_position = self.lexer.position - len(self.cur_token.literal)
         content = self.lexer.input[start_position:end_position].strip()
-        
-        return content
 
-    def parse_embedded_literal(self):
-        """Parse: embedded {language code} """
-        if not self.expect_peek(LBRACE):
-            return None
-            
-        self.next_token()  # Move to token after {
-        
-        # Read everything until matching }
-        code_content = self.read_embedded_code_content()
-        if code_content is None:
-            return None
-            
-        # Extract language from first line
-        lines = code_content.strip().split('\n')
-        if not lines:
-            self.errors.append("Empty embedded code block")
-            return None
-            
-        language_line = lines[0].strip()
-        language = language_line if language_line else "unknown"
-        
-        # The actual code is everything after the first line
-        code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
-        
-        return EmbeddedLiteral(language=language, code=code)
+        return content
 
     # === EXACTLY STATEMENT ===
     def parse_exactly_statement(self):
@@ -212,38 +195,38 @@ class Parser:
         body = self.parse_block_statement()
         return ExactlyStatement(name=name, body=body)
 
-    # === FOR EACH LOOPS (FIXED) ===
+    # === FOR EACH LOOPS ===
     def parse_for_each_statement(self):
         stmt = ForEachStatement(item=None, iterable=None, body=None)
-        
+
         if not self.expect_peek(EACH):
             self.errors.append("Expected 'each' after 'for' in for-each loop")
             return None
-            
+
         if not self.expect_peek(IDENT):
             self.errors.append("Expected identifier after 'each' in for-each loop")
             return None
-            
+
         stmt.item = Identifier(value=self.cur_token.literal)
-        
+
         if not self.expect_peek(IN):
             self.errors.append("Expected 'in' after item identifier in for-each loop")
             return None
-            
+
         self.next_token()
         stmt.iterable = self.parse_expression(LOWEST)
-        
+
         if not self.expect_peek(COLON):
             self.errors.append("Expected ':' after iterable in for-each loop")
             return None
-            
+
         body = BlockStatement()
         self.next_token()
         stmt_body = self.parse_statement()
         if stmt_body:
             body.statements.append(stmt_body)
         stmt.body = body
-        
+
         return stmt
 
     # === ACTION STATEMENTS ===
@@ -306,7 +289,7 @@ class Parser:
             body.statements.append(stmt)
         return ActionLiteral(parameters=parameters, body=body)
 
-    # === OTHER STATEMENTS (with improved error messages) ===
+    # === OTHER STATEMENTS ===
     def parse_if_statement(self):
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after 'if'")
