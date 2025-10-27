@@ -1,22 +1,33 @@
-# evaluator.py - BETTER IMPORT APPROACH
-
-# Import zexus_ast module to access AST node classes
+# evaluator.py (PRODUCTION-READY WITH ASSIGNMENT & MODULO)
 import zexus_ast
-
-# Import specific AST classes we need, with Boolean as AST_Boolean to avoid conflict
 from zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement, 
     ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
     EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
     ExactlyStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
     ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
-    Boolean as AST_Boolean  # ✅ Import AST Boolean with different name
+    Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression
 )
 
-# Import object classes with alias to avoid name conflict
 from object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue
 
 NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
+
+# === CONSTANT CACHE FOR PERFORMANCE ===
+constant_cache = {}
+
+def get_cached_integer(value):
+    """Cache integer objects for performance"""
+    if value not in constant_cache:
+        constant_cache[value] = Integer(value)
+    return constant_cache[value]
+
+def get_cached_boolean(value):
+    """Cache boolean objects for performance"""
+    key = f"bool_{value}"
+    if key not in constant_cache:
+        constant_cache[key] = TRUE if value else FALSE
+    return constant_cache[key]
 
 # === HELPER FUNCTIONS ===
 
@@ -28,16 +39,15 @@ def eval_program(statements, env):
             return result.value
     return result
 
-def eval_assignment_expression(left, right):
+def eval_assignment_expression(node, env):
     """Handle assignment expressions like: x = 5"""
-    if isinstance(left, Identifier):
-        # For now, we'll handle this in the environment
-        # In a real implementation, you'd update the variable in the environment
-        print(f"[ASSIGN] Would assign {left.value} = {right.inspect()}")
-        return right
-    else:
-        print(f"Error: Cannot assign to {left.type()}")
+    value = eval_node(node.value, env)
+    if value is None:
         return NULL
+        
+    # Set the variable in the environment
+    env.set(node.name.value, value)
+    return value
 
 def eval_block_statement(block, env):
     result = NULL
@@ -96,17 +106,12 @@ def eval_minus_prefix_operator_expression(right):
     return NULL
 
 def eval_infix_expression(operator, left, right):
-
-    # ✅ ADD assignment operator support at the TOP
-    if operator == "=":
-        return eval_assignment_expression(left, right)
-    
-    # ✅ ADD logical operators next
+    # ✅ ADD logical operators first
     if operator == "&&":
         return TRUE if is_truthy(left) and is_truthy(right) else FALSE
     elif operator == "||":
         return TRUE if is_truthy(left) or is_truthy(right) else FALSE
-    
+
     if isinstance(left, Integer) and isinstance(right, Integer):
         return eval_integer_infix_expression(operator, left, right)
     elif isinstance(left, Float) and isinstance(right, Float):
@@ -117,9 +122,9 @@ def eval_infix_expression(operator, left, right):
         return TRUE if left.value == right.value else FALSE
     elif operator == "!=":
         return TRUE if left.value != right.value else FALSE
-    elif operator == "<=":  # ✅ ADD <= operator
+    elif operator == "<=":
         return TRUE if left.value <= right.value else FALSE
-    elif operator == ">=":  # ✅ ADD >= operator
+    elif operator == ">=":
         return TRUE if left.value >= right.value else FALSE
     return NULL
 
@@ -135,13 +140,18 @@ def eval_integer_infix_expression(operator, left, right):
         return Integer(left_val * right_val)
     elif operator == "/":
         return Integer(left_val // right_val)
+    elif operator == "%":  # ✅ ADD modulo operator
+        if right_val == 0:
+            print("Error: Modulo by zero")
+            return NULL
+        return Integer(left_val % right_val)
     elif operator == "<":
         return TRUE if left_val < right_val else FALSE
     elif operator == ">":
         return TRUE if left_val > right_val else FALSE
-    elif operator == "<=":  # ✅ ADD <= operator
+    elif operator == "<=":
         return TRUE if left_val <= right_val else FALSE
-    elif operator == ">=":  # ✅ ADD >= operator
+    elif operator == ">=":
         return TRUE if left_val >= right_val else FALSE
     elif operator == "==":
         return TRUE if left_val == right_val else FALSE
@@ -161,13 +171,18 @@ def eval_float_infix_expression(operator, left, right):
         return Float(left_val * right_val)
     elif operator == "/":
         return Float(left_val / right_val)
+    elif operator == "%":  # ✅ ADD modulo operator for floats
+        if right_val == 0:
+            print("Error: Modulo by zero")
+            return NULL
+        return Float(left_val % right_val)
     elif operator == "<":
         return TRUE if left_val < right_val else FALSE
     elif operator == ">":
         return TRUE if left_val > right_val else FALSE
-    elif operator == "<=":  # ✅ ADD <= operator
+    elif operator == "<=":
         return TRUE if left_val <= right_val else FALSE
-    elif operator == ">=":  # ✅ ADD >= operator
+    elif operator == ">=":
         return TRUE if left_val >= right_val else FALSE
     elif operator == "==":
         return TRUE if left_val == right_val else FALSE
@@ -248,7 +263,7 @@ def builtin_string(*args):
         return String(str(arg.value))
     elif isinstance(arg, String):
         return arg
-    elif isinstance(arg, BooleanObj):  # Use the aliased name
+    elif isinstance(arg, BooleanObj):
         return String("true" if arg.value else "false")
     elif isinstance(arg, Map):
         return String(arg.inspect())
@@ -376,9 +391,26 @@ def eval_node(node, env):
             result = eval_node(node.body, env)
 
         return result
-   
-    elif node_type == AST_Boolean:  # Use the aliased name
-      return TRUE if node.value else FALSE
+
+    elif node_type == AssignmentExpression:  # ✅ ADD assignment support
+        return eval_assignment_expression(node, env)
+
+    elif node_type == PropertyAccessExpression:  # ✅ ADD property access
+        obj = eval_node(node.object, env)
+        property_name = node.property.value
+        
+        # Handle embedded code properties
+        if isinstance(obj, EmbeddedCode):
+            if property_name == "code":
+                return String(obj.code)
+            elif property_name == "language":
+                return String(obj.language)
+        
+        # For now, return NULL for other property access
+        return NULL
+
+    elif node_type == AST_Boolean:
+        return get_cached_boolean(node.value)
 
     elif node_type == MethodCallExpression:
         obj = eval_node(node.object, env)
@@ -386,13 +418,8 @@ def eval_node(node, env):
 
         # Handle embedded code method calls
         if isinstance(obj, EmbeddedCode):
-            if method_name == "code":
-                return String(obj.code)
-            elif method_name == "language":
-                return String(obj.language)
-            else:
-                args = eval_expressions(node.arguments, env)
-                return execute_embedded_function(obj, method_name, args)
+            args = eval_expressions(node.arguments, env)
+            return execute_embedded_function(obj, method_name, args)
 
         # Handle regular method calls
         print(f"Method call on {obj.type()}.{method_name} not implemented yet")
@@ -433,7 +460,7 @@ def eval_node(node, env):
 
     # Expressions
     elif node_type == IntegerLiteral:
-        return Integer(node.value)
+        return get_cached_integer(node.value)
 
     elif node_type == StringLiteral:
         return String(node.value)
