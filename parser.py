@@ -1,9 +1,9 @@
-# parser.py (COMPLETELY FIXED VERSION)
+# parser.py (COMPLETELY FIXED - WITH ASSIGNMENT HANDLING)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-# Precedence constants
+# ✅ ENHANCED precedence constants with ASSIGNMENT
 LOWEST, ASSIGN, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
@@ -39,7 +39,7 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
-            ASSIGN: self.parse_assignment_prefix,  # ✅ ADD THIS
+            ASSIGN: self.parse_assignment_prefix,  # ✅ CRITICAL FIX
         }
 
         self.infix_parse_fns = {
@@ -86,17 +86,20 @@ class Parser:
         if not self.cur_token_is(DOT):
             return None
 
+        # Get method name
         if not self.expect_peek(IDENT):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected method name after '.'")
             return None
 
         method = Identifier(self.cur_token.literal)
 
+        # Check for parentheses
         if self.peek_token_is(LPAREN):
-            self.next_token()
+            self.next_token()  # Move to LPAREN
             arguments = self.parse_expression_list(RPAREN)
             return MethodCallExpression(object=left, method=method, arguments=arguments)
         else:
+            # Property access without call
             return PropertyAccessExpression(object=left, property=method)
 
     def parse_program(self):
@@ -146,7 +149,243 @@ class Parser:
                 return
             self.next_token()
 
-    # ... (other methods remain the same until parse_let_statement) ...
+    def parse_embedded_literal(self):
+        """Parse: embedded {language code} """
+        if not self.expect_peek(LBRACE):
+            return None
+
+        self.next_token()  # Move to token after {
+
+        # Read everything until matching }
+        code_content = self.read_embedded_code_content()
+        if code_content is None:
+            return None
+
+        # Extract language from first line
+        lines = code_content.strip().split('\n')
+        if not lines:
+            self.errors.append("Empty embedded code block")
+            return None
+
+        language_line = lines[0].strip()
+        language = language_line if language_line else "unknown"
+
+        # The actual code is everything after the first line
+        code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+
+        return EmbeddedLiteral(language=language, code=code)
+
+    def read_embedded_code_content(self):
+        """Read content between { and } including nested braces"""
+        start_position = self.lexer.position
+        brace_count = 1  # We already saw the opening {
+
+        while brace_count > 0 and not self.cur_token_is(EOF):
+            self.next_token()
+            if self.cur_token_is(LBRACE):
+                brace_count += 1
+            elif self.cur_token_is(RBRACE):
+                brace_count -= 1
+
+        if self.cur_token_is(EOF):
+            self.errors.append("Unclosed embedded code block")
+            return None
+
+        # Extract the content (excluding the outer braces)
+        end_position = self.lexer.position - len(self.cur_token.literal)
+        content = self.lexer.input[start_position:end_position].strip()
+
+        return content
+
+    def parse_exactly_statement(self):
+        """Parse: exactly block_name { ... } """
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
+        if not self.expect_peek(LBRACE):
+            return None
+        body = self.parse_block_statement()
+        return ExactlyStatement(name=name, body=body)
+
+    def parse_for_each_statement(self):
+        stmt = ForEachStatement(item=None, iterable=None, body=None)
+
+        if not self.expect_peek(EACH):
+            self.errors.append("Expected 'each' after 'for' in for-each loop")
+            return None
+
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected identifier after 'each' in for-each loop")
+            return None
+
+        stmt.item = Identifier(value=self.cur_token.literal)
+
+        if not self.expect_peek(IN):
+            self.errors.append("Expected 'in' after item identifier in for-each loop")
+            return None
+
+        self.next_token()
+        stmt.iterable = self.parse_expression(LOWEST)
+
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' after iterable in for-each loop")
+            return None
+
+        body = BlockStatement()
+        self.next_token()
+        stmt_body = self.parse_statement()
+        if stmt_body:
+            body.statements.append(stmt_body)
+        stmt.body = body
+
+        return stmt
+
+    def parse_action_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected function name after 'action'")
+            return None
+        name = Identifier(self.cur_token.literal)
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after function name")
+            return None
+        parameters = self.parse_action_parameters()
+        if parameters is None:
+            return None
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' after function parameters")
+            return None
+        body = BlockStatement()
+        self.next_token()
+        stmt = self.parse_statement()
+        if stmt:
+            body.statements.append(stmt)
+        return ActionStatement(name=name, parameters=parameters, body=body)
+
+    def parse_action_parameters(self):
+        params = []
+        if self.peek_token_is(RPAREN):
+            self.next_token()
+            return params
+        self.next_token()
+        if not self.cur_token_is(IDENT):
+            self.errors.append("Expected parameter name")
+            return None
+        params.append(Identifier(self.cur_token.literal))
+        while self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            if not self.cur_token_is(IDENT):
+                self.errors.append("Expected parameter name after comma")
+                return None
+            params.append(Identifier(self.cur_token.literal))
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after parameters")
+            return None
+        return params
+
+    def parse_action_literal(self):
+        if not self.expect_peek(LPAREN):
+            return None
+        parameters = self.parse_action_parameters()
+        if parameters is None:
+            return None
+        if not self.expect_peek(COLON):
+            return None
+        body = BlockStatement()
+        self.next_token()
+        stmt = self.parse_statement()
+        if stmt:
+            body.statements.append(stmt)
+        return ActionLiteral(parameters=parameters, body=body)
+
+    def parse_if_statement(self):
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'if'")
+            return None
+        self.next_token()
+        condition = self.parse_expression(LOWEST)
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after if condition")
+            return None
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' after if condition")
+            return None
+        consequence = BlockStatement()
+        self.next_token()
+        stmt = self.parse_statement()
+        if stmt:
+            consequence.statements.append(stmt)
+        alternative = None
+        if self.peek_token_is(ELSE):
+            self.next_token()
+            if self.peek_token_is(IF):
+                self.next_token()
+                alternative = self.parse_if_statement()
+            else:
+                if not self.expect_peek(COLON):
+                    self.errors.append("Expected ':' after 'else'")
+                    return None
+                alternative = BlockStatement()
+                self.next_token()
+                stmt = self.parse_statement()
+                if stmt:
+                    alternative.statements.append(stmt)
+        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+
+    def parse_while_statement(self):
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'while'")
+            return None
+        self.next_token()
+        condition = self.parse_expression(LOWEST)
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after while condition")
+            return None
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' after while condition")
+            return None
+        body = BlockStatement()
+        self.next_token()
+        stmt = self.parse_statement()
+        if stmt:
+            body.statements.append(stmt)
+        return WhileStatement(condition=condition, body=body)
+
+    def parse_use_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected embedded reference after 'use'")
+            return None
+        embedded_ref = Identifier(self.cur_token.literal)
+        if not self.expect_peek(DOT):
+            self.errors.append("Expected '.' after embedded reference")
+            return None
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected method name after '.'")
+            return None
+        method = self.cur_token.literal
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after method name")
+            return None
+        arguments = self.parse_expression_list(RPAREN)
+        return UseStatement(embedded_ref, method, arguments)
+
+    def parse_screen_statement(self):
+        stmt = ScreenStatement(name=None, body=None)
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected screen name after 'screen'")
+            return None
+        stmt.name = Identifier(value=self.cur_token.literal)
+        if not self.expect_peek(LBRACE):
+            self.errors.append("Expected '{' after screen name")
+            return None
+        stmt.body = self.parse_block_statement()
+        return stmt
+
+    def parse_return_statement(self):
+        stmt = ReturnStatement(return_value=None)
+        self.next_token()
+        stmt.return_value = self.parse_expression(LOWEST)
+        return stmt
 
     def parse_let_statement(self):
         stmt = LetStatement(name=None, value=None)
@@ -154,12 +393,9 @@ class Parser:
             self.errors.append("Expected variable name after 'let'")
             return None
         stmt.name = Identifier(value=self.cur_token.literal)
-        
-        # ✅ FIXED: Use ASSIGN token constant instead of literal '='
         if not self.expect_peek(ASSIGN):
             self.errors.append("Expected '=' after variable name")
             return None
-            
         self.next_token()
         stmt.value = self.parse_expression(LOWEST)
         if self.peek_token_is(SEMICOLON):
@@ -187,6 +423,7 @@ class Parser:
         prefix = self.prefix_parse_fns[self.cur_token.type]
         left_exp = prefix()
 
+        # ✅ FIXED: Better condition for stopping expression parsing
         while (not self.peek_token_is(SEMICOLON) and 
                not self.peek_token_is(EOF) and
                precedence < self.peek_precedence()):
