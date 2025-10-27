@@ -1,0 +1,10 @@
+# Simple assignment test
+print("Testing assignment...")
+
+x = 10
+print("x = " + string(x))
+
+y = x + 5
+print("y = x + 5 = " + string(y))
+
+print("Assignment test complete!")
