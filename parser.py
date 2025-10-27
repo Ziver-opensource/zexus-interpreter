@@ -1,18 +1,20 @@
-# parser.py (COMPLETELY FIXED - NO DUPLICATES)
+# parser.py (PRODUCTION-READY WITH ASSIGNMENT & METHOD CALLS)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-# ✅ ADD LOGICAL precedence constant
-LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8
+# ✅ ENHANCED precedence constants with ASSIGNMENT
+LOWEST, ASSIGN, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS, 
     LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
     PLUS: SUM, MINUS: SUM, 
-    SLASH: PRODUCT, STAR: PRODUCT,
-    AND: LOGICAL, OR: LOGICAL,  # ✅ ADD logical operators
+    SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,  # ✅ ADD modulo
+    AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
+    DOT: CALL,  # ✅ Method calls have same precedence as function calls
+    ASSIGN: ASSIGN,  # ✅ Assignment has lowest precedence after comma
 }
 
 class Parser:
@@ -44,14 +46,16 @@ class Parser:
             MINUS: self.parse_infix_expression,
             SLASH: self.parse_infix_expression,
             STAR: self.parse_infix_expression,
-            EQ: self.parse_infix_expression,  # ✅ This handles assignment expressions
+            MOD: self.parse_infix_expression,  # ✅ ADD modulo operator
+            EQ: self.parse_infix_expression,
             NOT_EQ: self.parse_infix_expression,
             LT: self.parse_infix_expression,
             GT: self.parse_infix_expression,
             LTE: self.parse_infix_expression,
             GTE: self.parse_infix_expression,
-            AND: self.parse_infix_expression,  # ✅ ADD logical AND
-            OR: self.parse_infix_expression,   # ✅ ADD logical OR
+            AND: self.parse_infix_expression,
+            OR: self.parse_infix_expression,
+            ASSIGN: self.parse_assignment_expression,  # ✅ ADD assignment
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
@@ -59,22 +63,38 @@ class Parser:
         self.next_token()
         self.next_token()
 
+    def parse_assignment_expression(self, left):
+        """Parse assignment expressions: identifier = value"""
+        if not isinstance(left, Identifier):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}")
+            return None
+            
+        expression = AssignmentExpression(name=left, value=None)
+        precedence = self.cur_precedence()
+        self.next_token()
+        expression.value = self.parse_expression(precedence)
+        return expression
+
     def parse_method_call_expression(self, left):
         """Parse: object.method(arguments)"""
         if not self.cur_token_is(DOT):
             return None
 
+        # Get method name
         if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected method name after '.'")
             return None
 
         method = Identifier(self.cur_token.literal)
 
-        if not self.expect_peek(LPAREN):
-            return None
-
-        arguments = self.parse_expression_list(RPAREN)
-
-        return MethodCallExpression(object=left, method=method, arguments=arguments)
+        # Check for parentheses
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # Move to LPAREN
+            arguments = self.parse_expression_list(RPAREN)
+            return MethodCallExpression(object=left, method=method, arguments=arguments)
+        else:
+            # Property access without call
+            return PropertyAccessExpression(object=left, property=method)
 
     def parse_program(self):
         program = Program()
@@ -110,7 +130,7 @@ class Parser:
             else:
                 return self.parse_expression_statement()
         except Exception as e:
-            self.errors.append(f"Parse error at {self.cur_token}: {str(e)}")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}")
             self.recover_to_next_statement()
             return None
 
@@ -390,14 +410,13 @@ class Parser:
             self.next_token()
         return stmt
 
-    # === EXPRESSIONS - SINGLE VERSION ===
     def parse_expression(self, precedence):
         if self.cur_token.type not in self.prefix_parse_fns:
-            self.errors.append(f"No prefix parse function for {self.cur_token.type}")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type}")
             return None
         prefix = self.prefix_parse_fns[self.cur_token.type]
         left_exp = prefix()
-        
+
         # ✅ FIXED: Better condition for stopping expression parsing
         while (not self.peek_token_is(SEMICOLON) and 
                not self.peek_token_is(EOF) and
@@ -416,14 +435,14 @@ class Parser:
         try:
             return IntegerLiteral(value=int(self.cur_token.literal))
         except ValueError:
-            self.errors.append(f"Could not parse {self.cur_token.literal} as integer")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Could not parse {self.cur_token.literal} as integer")
             return None
 
     def parse_float_literal(self):
         try:
             return FloatLiteral(value=float(self.cur_token.literal))
         except ValueError:
-            self.errors.append(f"Could not parse {self.cur_token.literal} as float")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Could not parse {self.cur_token.literal} as float")
             return None
 
     def parse_string_literal(self):
@@ -539,7 +558,7 @@ class Parser:
         if self.peek_token_is(t):
             self.next_token()
             return True
-        self.errors.append(f"Expected next token to be {t}, got {self.peek_token.type} instead at position {self.lexer.position}")
+        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected next token to be {t}, got {self.peek_token.type} instead")
         return False
 
     def peek_precedence(self):
