@@ -1,4 +1,4 @@
-# lexer.py (COMPLETE FIXED VERSION WITH COMPARISON OPERATORS)
+# lexer.py (ENHANCED WITH LINE/COLUMN TRACKING)
 from zexus_token import *
 
 class Lexer:
@@ -7,7 +7,9 @@ class Lexer:
         self.position = 0
         self.read_position = 0
         self.ch = ""
-        self.in_embedded_block = False  # Track if we're in embedded code
+        self.in_embedded_block = False
+        self.line = 1
+        self.column = 1
         self.read_char()
 
     def read_char(self):
@@ -15,6 +17,14 @@ class Lexer:
             self.ch = ""
         else:
             self.ch = self.input[self.read_position]
+        
+        # Update line and column tracking
+        if self.ch == '\n':
+            self.line += 1
+            self.column = 1
+        else:
+            self.column += 1
+            
         self.position = self.read_position
         self.read_position += 1
 
@@ -33,6 +43,8 @@ class Lexer:
             return self.next_token()
 
         tok = None
+        current_line = self.line
+        current_column = self.column
 
         if self.ch == '=':
             if self.peek_char() == '=':
@@ -40,107 +52,169 @@ class Lexer:
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(EQ, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(ASSIGN, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '!':
             if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(NOT_EQ, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(BANG, self.ch)
-        # ✅ ADD logical AND operator
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '&':
             if self.peek_char() == '&':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(AND, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(ILLEGAL, self.ch)
-        # ✅ ADD logical OR operator  
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '|':
             if self.peek_char() == '|':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(OR, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(ILLEGAL, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '<':
-            if self.peek_char() == '=':  # ✅ ADD <= operator
+            if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(LTE, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(LT, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '>':
-            if self.peek_char() == '=':  # ✅ ADD >= operator
+            if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(GTE, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(GT, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '"':
-            tok = Token(STRING, self.read_string())
+            string_literal = self.read_string()
+            tok = Token(STRING, string_literal)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '[':
             tok = Token(LBRACKET, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == ']':
             tok = Token(RBRACKET, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '(':
             tok = Token(LPAREN, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == ')':
             tok = Token(RPAREN, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '{':
             # Check if this might be start of embedded block
             lookback = self.input[max(0, self.position-10):self.position]
             if 'embedded' in lookback:
                 self.in_embedded_block = True
             tok = Token(LBRACE, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '}':
             if self.in_embedded_block:
                 self.in_embedded_block = False
             tok = Token(RBRACE, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == ',':
             tok = Token(COMMA, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == ';':
             tok = Token(SEMICOLON, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == ':':
             tok = Token(COLON, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '+':
             tok = Token(PLUS, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '-':
             tok = Token(MINUS, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '*':
             tok = Token(STAR, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '/':
             tok = Token(SLASH, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '%':
             tok = Token(MOD, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == '.':
             tok = Token(DOT, self.ch)
+            tok.line = current_line
+            tok.column = current_column
         elif self.ch == "":
             tok = Token(EOF, "")
+            tok.line = current_line
+            tok.column = current_column
         else:
             if self.is_letter(self.ch):
                 literal = self.read_identifier()
 
-                # ✅ FIX: In embedded blocks, treat all keywords as IDENT
                 if self.in_embedded_block:
                     token_type = IDENT
                 else:
                     token_type = self.lookup_ident(literal)
 
-                return Token(token_type, literal)
+                tok = Token(token_type, literal)
+                tok.line = current_line
+                tok.column = current_column
+                return tok
             elif self.is_digit(self.ch):
                 num_literal = self.read_number()
                 if '.' in num_literal:
-                    return Token(FLOAT, num_literal)
+                    tok = Token(FLOAT, num_literal)
                 else:
-                    return Token(INT, num_literal)
+                    tok = Token(INT, num_literal)
+                tok.line = current_line
+                tok.column = current_column
+                return tok
             else:
                 if self.ch in ['\n', '\r']:
                     self.read_char()
@@ -148,8 +222,13 @@ class Lexer:
                 # For embedded code, treat unknown printable chars as IDENT
                 if self.ch.isprintable():
                     literal = self.read_embedded_char()
-                    return Token(IDENT, literal)
+                    tok = Token(IDENT, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                    return tok
                 tok = Token(ILLEGAL, self.ch)
+                tok.line = current_line
+                tok.column = current_column
 
         self.read_char()
         return tok
