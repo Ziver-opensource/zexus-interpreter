@@ -1,4 +1,4 @@
-# parser.py (PRODUCTION-READY WITH ASSIGNMENT & METHOD CALLS)
+# parser.py (COMPLETELY FIXED - WITH ASSIGNMENT HANDLING)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -10,11 +10,11 @@ precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS, 
     LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
     PLUS: SUM, MINUS: SUM, 
-    SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,  # ✅ ADD modulo
+    SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
-    DOT: CALL,  # ✅ Method calls have same precedence as function calls
-    ASSIGN: ASSIGN,  # ✅ Assignment has lowest precedence after comma
+    DOT: CALL,
+    ASSIGN: ASSIGN,
 }
 
 class Parser:
@@ -39,7 +39,7 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
-            ASSIGN: self.parse_assignment_prefix,  # ✅ ADD THIS LINE
+            ASSIGN: self.parse_assignment_prefix,  # ✅ CRITICAL FIX
         }
 
         self.infix_parse_fns = {
@@ -47,7 +47,7 @@ class Parser:
             MINUS: self.parse_infix_expression,
             SLASH: self.parse_infix_expression,
             STAR: self.parse_infix_expression,
-            MOD: self.parse_infix_expression,  # ✅ ADD modulo operator
+            MOD: self.parse_infix_expression,
             EQ: self.parse_infix_expression,
             NOT_EQ: self.parse_infix_expression,
             LT: self.parse_infix_expression,
@@ -56,13 +56,18 @@ class Parser:
             GTE: self.parse_infix_expression,
             AND: self.parse_infix_expression,
             OR: self.parse_infix_expression,
-            ASSIGN: self.parse_assignment_expression,  # ✅ ADD assignment
+            ASSIGN: self.parse_assignment_expression,  # ✅ Assignment as infix
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
 
         self.next_token()
         self.next_token()
+
+    def parse_assignment_prefix(self):
+        """Handle assignment as a prefix when it shouldn't be there"""
+        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Invalid use of assignment operator '='")
+        return None
 
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
