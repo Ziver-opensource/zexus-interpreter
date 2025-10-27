@@ -1,7 +1,7 @@
-# evaluator.py (PRODUCTION-READY WITH ASSIGNMENT & MODULO)
+# evaluator.py (COMPLETE FIXED VERSION)
 import zexus_ast
 from zexus_ast import (
-    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement, 
+    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
     ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
     EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
     ExactlyStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
@@ -44,7 +44,7 @@ def eval_assignment_expression(node, env):
     value = eval_node(node.value, env)
     if value is None:
         return NULL
-        
+
     # Set the variable in the environment
     env.set(node.name.value, value)
     return value
@@ -358,18 +358,6 @@ def eval_node(node, env):
         env.set(node.name.value, action_obj)
         return NULL
 
-    # In evaluator.py, add this to eval_node function:
-
-    elif node_type == AssignmentExpression:
-    # Evaluate the right-hand side
-      value = eval_node(node.value, env)
-      if value is None:
-        return NULL
-        
-    # Set the variable in the environment
-      env.set(node.name.value, value)
-        return value
-
     elif node_type == IfStatement:
         condition = eval_node(node.condition, env)
         if is_truthy(condition):
@@ -404,20 +392,21 @@ def eval_node(node, env):
 
         return result
 
-    elif node_type == AssignmentExpression:  # ✅ ADD assignment support
+    # ✅ FIXED: Only one AssignmentExpression case with proper indentation
+    elif node_type == AssignmentExpression:
         return eval_assignment_expression(node, env)
 
-    elif node_type == PropertyAccessExpression:  # ✅ ADD property access
+    elif node_type == PropertyAccessExpression:
         obj = eval_node(node.object, env)
         property_name = node.property.value
-        
+
         # Handle embedded code properties
         if isinstance(obj, EmbeddedCode):
             if property_name == "code":
                 return String(obj.code)
             elif property_name == "language":
                 return String(obj.language)
-        
+
         # For now, return NULL for other property access
         return NULL
 
