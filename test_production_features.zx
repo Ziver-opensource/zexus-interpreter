@@ -1,0 +1,95 @@
+# test_production_features.zx
+# Production-ready Zexus feature demonstration
+
+print("=== ZEXUS PRODUCTION FEATURES TEST ===")
+
+# 1. ASSIGNMENT OPERATOR
+print("1. Assignment operator:")
+x = 10
+print("x = " + string(x))
+y = x + 5
+print("y = x + 5 = " + string(y))
+
+# 2. MODULO OPERATOR  
+print("\n2. Modulo operator:")
+a = 17 % 5
+print("17 % 5 = " + string(a))
+b = 20 % 3
+print("20 % 3 = " + string(b))
+
+# 3. METHOD CALLS
+print("\n3. Method calls:")
+my_list = [1, 2, 3, 4, 5]
+print("List length: " + string(len(my_list)))
+
+# 4. PROPERTY ACCESS
+print("\n4. Property access:")
+embedded python {
+print("Hello from Python!")
+}
+print("Embedded language: " + embedded.language)
+
+# 5. COMPLEX EXPRESSIONS WITH ASSIGNMENT
+print("\n5. Complex expressions:")
+result = (x + y) * 2 % 7
+print("(x + y) * 2 % 7 = " + string(result))
+
+# 6. CONTROL FLOW WITH ASSIGNMENT
+print("\n6. Control flow with assignment:")
+counter = 0
+while counter < 5:
+    counter = counter + 1
+    print("Counter: " + string(counter))
+
+# 7. FOR EACH WITH ASSIGNMENT
+print("\n7. For-each with assignment:")
+total = 0
+for each item in [10, 20, 30]:
+    total = total + item
+    print("Running total: " + string(total))
+
+# 8. FUNCTION WITH ASSIGNMENT
+print("\n8. Functions with assignment:")
+action calculate_sum(a, b):
+    result = a + b
+    return result
+
+sum_result = calculate_sum(25, 35)
+print("calculate_sum(25, 35) = " + string(sum_result))
+
+# 9. EXACTLY BLOCKS
+print("\n9. Exactly blocks:")
+exactly my_block:
+    print("Executing exact block!")
+    value = 42
+    print("Block value: " + string(value))
+
+# 10. LOGICAL OPERATORS WITH ASSIGNMENT
+print("\n10. Logical operators:")
+flag1 = true
+flag2 = false
+and_result = flag1 && flag2
+or_result = flag1 || flag2
+print("true && false = " + string(and_result))
+print("true || false = " + string(or_result))
+
+# 11. COMPARISON CHAINS
+print("\n11. Comparison chains:")
+x = 10
+y = 20
+z = 15
+comparison = (x < y) && (y > z)
+print("(10 < 20) && (20 > 15) = " + string(comparison))
+
+# 12. NESTED ASSIGNMENTS
+print("\n12. Nested assignments:")
+nested = {
+    "level1": {
+        "level2": {
+            "value": 100
+        }
+    }
+}
+print("Nested map created successfully")
+
+print("\n=== ALL TESTS COMPLETED ===")
