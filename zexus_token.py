@@ -1,6 +1,4 @@
-# zexus_token.py (COMPLETE FIXED VERSION)
-
-# This file defines all the possible token types in the Zexus language.
+# zexus_token.py (ENHANCED WITH LINE/COLUMN TRACKING)
 
 # Special Tokens
 ILLEGAL = "ILLEGAL"
@@ -19,14 +17,14 @@ MINUS = "-"
 SLASH = "/"
 STAR = "*"
 BANG = "!"
-LT = "<"      # ✅ ADDED
-GT = ">"      # ✅ ADDED
+LT = "<"
+GT = ">"
 EQ = "=="
 NOT_EQ = "!="
-MOD = "%"      # Modulo operator
-DOT = "."      # Dot operator for method calls
-LTE = "<="      # Less than or equal
-GTE = ">="      # Greater than or equal
+MOD = "%"
+DOT = "."
+LTE = "<="
+GTE = ">="
 AND = "&&"
 OR = "||"
 
@@ -57,14 +55,17 @@ SCREEN = "SCREEN"
 MAP = "MAP"
 WHILE = "WHILE"
 USE = "USE"
-EXACTLY = "EXACTLY"  # ✅ ADDED
-EMBEDDED = "EMBEDDED"  # ADD THIS LINE
+EXACTLY = "EXACTLY"
+EMBEDDED = "EMBEDDED"
 
-# The Token class represents a single token, holding its type and value.
 class Token:
-    def __init__(self, token_type, literal):
+    def __init__(self, token_type, literal, line=None, column=None):
         self.type = token_type
         self.literal = literal
+        self.line = line  # ✅ ADD line tracking
+        self.column = column  # ✅ ADD column tracking
 
     def __repr__(self):
+        if self.line and self.column:
+            return f"Token({self.type}, '{self.literal}', line={self.line}, col={self.column})"
         return f"Token({self.type}, '{self.literal}')"
