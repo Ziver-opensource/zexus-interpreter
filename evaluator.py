@@ -358,6 +358,18 @@ def eval_node(node, env):
         env.set(node.name.value, action_obj)
         return NULL
 
+    # In evaluator.py, add this to eval_node function:
+
+    elif node_type == AssignmentExpression:
+    # Evaluate the right-hand side
+      value = eval_node(node.value, env)
+      if value is None:
+        return NULL
+        
+    # Set the variable in the environment
+      env.set(node.name.value, value)
+        return value
+
     elif node_type == IfStatement:
         condition = eval_node(node.condition, env)
         if is_truthy(condition):
