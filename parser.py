@@ -4,7 +4,7 @@ from lexer import Lexer
 from zexus_ast import *
 
 # Precedence constants
-LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL, ASSIGN = 1, 2, 3, 4, 5, 6, 7, 8, 9
+LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL, ASSIGN_PREC = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS,
@@ -14,7 +14,7 @@ precedences = {
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     DOT: CALL,
-    "=": ASSIGN_PREC,  # So this is the fix
+    "=": ASSIGN_PREC,  # Use the actual token string "=" with correct precedence
 }
 
 class Parser:
@@ -24,12 +24,12 @@ class Parser:
         self.cur_token = None
         self.peek_token = None
 
-        # Debug: Check if ASSIGN is correctly mapped
-        print(f"=== PRECEDENCE DEBUG ===")
-        print(f"ASSIGN token type: '{ASSIGN}'")
-        print(f"ASSIGN in precedences: {ASSIGN in precedences}")
-        print(f"Value: {precedences.get(ASSIGN, 'NOT FOUND')}")
-        print("========================")
+        # Debug: Check token mappings
+        print(f"=== TOKEN DEBUG ===")
+        print(f"ASSIGN constant: '{ASSIGN}'")
+        print(f"'=' in precedences: {'=' in precedences}")
+        print(f"Value for '=': {precedences.get('=', 'NOT FOUND')}")
+        print("===================")
 
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
@@ -674,10 +674,10 @@ class Parser:
 
     def peek_precedence(self):
         result = precedences.get(self.peek_token.type, LOWEST)
-        print(f"DEBUG: peek_precedence for {self.peek_token.type} = {result}")
+        print(f"DEBUG: peek_precedence for '{self.peek_token.type}' = {result}")
         return result
 
     def cur_precedence(self):
         result = precedences.get(self.cur_token.type, LOWEST)
-        print(f"DEBUG: cur_precedence for {self.cur_token.type} = {result}")
+        print(f"DEBUG: cur_precedence for '{self.cur_token.type}' = {result}")
         return result
