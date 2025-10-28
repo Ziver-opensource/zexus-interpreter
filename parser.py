@@ -1,4 +1,4 @@
-# parser.py (COMPLETE FIXED VERSION)
+# parser.py (DEBUG VERSION)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -63,6 +63,8 @@ class Parser:
 
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
+        print(f"DEBUG: parse_assignment_expression called with left={left}")
+        
         # Only allow assignment to identifiers
         if not isinstance(left, Identifier):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
@@ -70,10 +72,14 @@ class Parser:
 
         expression = AssignmentExpression(name=left, value=None)
         precedence = self.cur_precedence()
+        print(f"DEBUG: assignment precedence={precedence}, cur_token={self.cur_token}")
+        
         self.next_token()  # Move past the =
 
         # Parse the right-hand side
+        print(f"DEBUG: parsing right-hand side of assignment")
         expression.value = self.parse_expression(precedence)
+        print(f"DEBUG: assignment result: {expression}")
         return expression
 
     def parse_method_call_expression(self, left):
@@ -448,13 +454,21 @@ class Parser:
         return stmt
 
     def parse_expression(self, precedence):
+        print(f"DEBUG: parse_expression called with precedence={precedence}")
+        print(f"DEBUG: cur_token={self.cur_token}, peek_token={self.peek_token}")
+        
         # Check if current token has a prefix parse function
         if self.cur_token.type not in self.prefix_parse_fns:
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found")
+            error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found"
+            print(f"DEBUG: {error_msg}")
+            self.errors.append(error_msg)
             return None
 
         prefix = self.prefix_parse_fns[self.cur_token.type]
+        print(f"DEBUG: calling prefix function for {self.cur_token.type}")
         left_exp = prefix()
+        print(f"DEBUG: prefix result: {left_exp}")
+        
         if left_exp is None:
             return None
 
@@ -463,45 +477,64 @@ class Parser:
                not self.peek_token_is(EOF) and 
                precedence < self.peek_precedence()):
             
+            print(f"DEBUG: Inside while loop - peek_token={self.peek_token}, peek_precedence={self.peek_precedence()}")
+            
             # Check if the next token has an infix parse function
             if self.peek_token.type not in self.infix_parse_fns:
+                print(f"DEBUG: No infix function for {self.peek_token.type}, returning left_exp")
                 return left_exp
 
+            print(f"DEBUG: Found infix function for {self.peek_token.type}")
             # Get the infix function for the peek token
             infix = self.infix_parse_fns[self.peek_token.type]
-            
+
             # Advance to the infix operator
             self.next_token()
-            
+            print(f"DEBUG: Advanced to infix token: {self.cur_token}")
+
             # Parse the infix expression
+            print(f"DEBUG: Calling infix function with left={left_exp}")
             left_exp = infix(left_exp)
+            print(f"DEBUG: infix result: {left_exp}")
+            
             if left_exp is None:
                 return None
 
+        print(f"DEBUG: parse_expression returning: {left_exp}")
         return left_exp
 
     def parse_identifier(self):
-        return Identifier(value=self.cur_token.literal)
+        result = Identifier(value=self.cur_token.literal)
+        print(f"DEBUG: parse_identifier returning: {result}")
+        return result
 
     def parse_integer_literal(self):
         try:
-            return IntegerLiteral(value=int(self.cur_token.literal))
+            result = IntegerLiteral(value=int(self.cur_token.literal))
+            print(f"DEBUG: parse_integer_literal returning: {result}")
+            return result
         except ValueError:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Could not parse {self.cur_token.literal} as integer")
             return None
 
     def parse_float_literal(self):
         try:
-            return FloatLiteral(value=float(self.cur_token.literal))
+            result = FloatLiteral(value=float(self.cur_token.literal))
+            print(f"DEBUG: parse_float_literal returning: {result}")
+            return result
         except ValueError:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Could not parse {self.cur_token.literal} as float")
             return None
 
     def parse_string_literal(self):
-        return StringLiteral(value=self.cur_token.literal)
+        result = StringLiteral(value=self.cur_token.literal)
+        print(f"DEBUG: parse_string_literal returning: {result}")
+        return result
 
     def parse_boolean(self):
-        return Boolean(value=self.cur_token_is(TRUE))
+        result = Boolean(value=self.cur_token_is(TRUE))
+        print(f"DEBUG: parse_boolean returning: {result}")
+        return result
 
     def parse_list_literal(self):
         list_lit = ListLiteral(elements=[])
@@ -633,7 +666,11 @@ class Parser:
         return False
 
     def peek_precedence(self):
-        return precedences.get(self.peek_token.type, LOWEST)
+        result = precedences.get(self.peek_token.type, LOWEST)
+        print(f"DEBUG: peek_precedence for {self.peek_token.type} = {result}")
+        return result
 
     def cur_precedence(self):
-        return precedences.get(self.cur_token.type, LOWEST)
+        result = precedences.get(self.cur_token.type, LOWEST)
+        print(f"DEBUG: cur_precedence for {self.cur_token.type} = {result}")
+        return result
