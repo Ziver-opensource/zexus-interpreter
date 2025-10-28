@@ -39,7 +39,6 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
-            # REMOVE ASSIGN from prefix - it should never be a prefix
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -55,7 +54,7 @@ class Parser:
             GTE: self.parse_infix_expression,
             AND: self.parse_infix_expression,
             OR: self.parse_infix_expression,
-            ASSIGN: self.parse_assignment_expression,  # Special handling for assignment
+            ASSIGN: self.parse_assignment_expression,
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
@@ -460,19 +459,21 @@ class Parser:
             return None
 
         # Continue parsing while we have higher precedence infix operators
-        while (not self.peek_token_is(SEMICOLON) and not self.peek_token_is(EOF) and
+        while (not self.peek_token_is(SEMICOLON) and 
+               not self.peek_token_is(EOF) and 
                precedence < self.peek_precedence()):
-
+            
             # Check if the next token has an infix parse function
             if self.peek_token.type not in self.infix_parse_fns:
                 return left_exp
 
-            # Get the infix function for the PEEK token (before advancing)
+            # Get the infix function for the peek token
             infix = self.infix_parse_fns[self.peek_token.type]
-
-            # Now advance to the infix operator
+            
+            # Advance to the infix operator
             self.next_token()
-
+            
+            # Parse the infix expression
             left_exp = infix(left_exp)
             if left_exp is None:
                 return None
