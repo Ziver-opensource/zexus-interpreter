@@ -14,7 +14,7 @@ precedences = {
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     DOT: CALL,
-    ASSIGN: ASSIGN,  # Make sure this matches the token type exactly
+    "=": ASSIGN_PREC,  # So this is the fix
 }
 
 class Parser:
