@@ -24,6 +24,14 @@ class Parser:
         self.cur_token = None
         self.peek_token = None
 
+        # Add this to your parser temporarily to debug
+    def debug_precedences(self):
+        print("=== PRECEDENCES DEBUG ===")
+        print(f"ASSIGN token type: {ASSIGN}")
+        print(f"precedences mapping: {precedences}")
+        print(f"ASSIGN in precedences: {ASSIGN in precedences}")
+        print(f"Value for ASSIGN: {precedences.get(ASSIGN, 'NOT FOUND')}")
+
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
             INT: self.parse_integer_literal,
