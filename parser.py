@@ -409,16 +409,35 @@ class Parser:
         return stmt
 
     def parse_expression(self, precedence):
-        # Check if current token has a prefix parse function
-        if self.cur_token.type not in self.prefix_parse_fns:
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found")
-            return None
-        
-        prefix = self.prefix_parse_fns[self.cur_token.type]
-        left_exp = prefix()
-        
+    # Check if current token has a prefix parse function
+    if self.cur_token.type not in self.prefix_parse_fns:
+        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found")
+        return None
+
+    prefix = self.prefix_parse_fns[self.cur_token.type]
+    left_exp = prefix()
+
+    if left_exp is None:
+        return None
+
+    # Continue parsing while we have higher precedence infix operators
+    while (not self.peek_token_is(SEMICOLON) and 
+           not self.peek_token_is(EOF) and  # ✅ ADD EOF check
+           precedence < self.peek_precedence()):
+
+        # Check if the next token has an infix parse function
+        if self.peek_token.type not in self.infix_parse_fns:
+            return left_exp
+
+        # ✅ CRITICAL FIX: Advance to the infix operator BEFORE calling the infix function
+        self.next_token()  # This moves the infix operator to cur_token
+        infix = self.infix_parse_fns[self.cur_token.type]  # Use cur_token.type now
+        left_exp = infix(left_exp)
+
         if left_exp is None:
             return None
+
+    return left_exp
 
         # Continue parsing while we have higher precedence infix operators
         while (not self.peek_token_is(SEMICOLON) and 
