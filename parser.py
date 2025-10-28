@@ -7,9 +7,9 @@ from zexus_ast import *
 LOWEST, ASSIGN, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
-    EQ: EQUALS, NOT_EQ: EQUALS, 
+    EQ: EQUALS, NOT_EQ: EQUALS,
     LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
-    PLUS: SUM, MINUS: SUM, 
+    PLUS: SUM, MINUS: SUM,
     SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
@@ -41,7 +41,6 @@ class Parser:
             EMBEDDED: self.parse_embedded_literal,
             # REMOVE ASSIGN from prefix - it should never be a prefix
         }
-
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
             MINUS: self.parse_infix_expression,
@@ -60,7 +59,6 @@ class Parser:
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
-
         self.next_token()
         self.next_token()
 
@@ -70,14 +68,13 @@ class Parser:
         if not isinstance(left, Identifier):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
             return None
-            
+
         expression = AssignmentExpression(name=left, value=None)
         precedence = self.cur_precedence()
         self.next_token()  # Move past the =
-        
+
         # Parse the right-hand side
         expression.value = self.parse_expression(precedence)
-        
         return expression
 
     def parse_method_call_expression(self, left):
@@ -151,7 +148,6 @@ class Parser:
             return None
 
         self.next_token()  # Move to token after {
-
         code_content = self.read_embedded_code_content()
         if code_content is None:
             return None
@@ -163,9 +159,7 @@ class Parser:
 
         language_line = lines[0].strip()
         language = language_line if language_line else "unknown"
-
         code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
-
         return EmbeddedLiteral(language=language, code=code)
 
     def read_embedded_code_content(self):
@@ -186,16 +180,18 @@ class Parser:
 
         end_position = self.lexer.position - len(self.cur_token.literal)
         content = self.lexer.input[start_position:end_position].strip()
-
         return content
 
     def parse_exactly_statement(self):
         """Parse: exactly block_name { ... } """
         if not self.expect_peek(IDENT):
             return None
+
         name = Identifier(self.cur_token.literal)
+
         if not self.expect_peek(LBRACE):
             return None
+
         body = self.parse_block_statement()
         return ExactlyStatement(name=name, body=body)
 
@@ -228,29 +224,35 @@ class Parser:
         stmt_body = self.parse_statement()
         if stmt_body:
             body.statements.append(stmt_body)
-        stmt.body = body
 
+        stmt.body = body
         return stmt
 
     def parse_action_statement(self):
         if not self.expect_peek(IDENT):
             self.errors.append("Expected function name after 'action'")
             return None
+
         name = Identifier(self.cur_token.literal)
+
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after function name")
             return None
+
         parameters = self.parse_action_parameters()
         if parameters is None:
             return None
+
         if not self.expect_peek(COLON):
             self.errors.append("Expected ':' after function parameters")
             return None
+
         body = BlockStatement()
         self.next_token()
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
+
         return ActionStatement(name=name, parameters=parameters, body=body)
 
     def parse_action_parameters(self):
@@ -258,11 +260,14 @@ class Parser:
         if self.peek_token_is(RPAREN):
             self.next_token()
             return params
+
         self.next_token()
         if not self.cur_token_is(IDENT):
             self.errors.append("Expected parameter name")
             return None
+
         params.append(Identifier(self.cur_token.literal))
+
         while self.peek_token_is(COMMA):
             self.next_token()
             self.next_token()
@@ -270,43 +275,54 @@ class Parser:
                 self.errors.append("Expected parameter name after comma")
                 return None
             params.append(Identifier(self.cur_token.literal))
+
         if not self.expect_peek(RPAREN):
             self.errors.append("Expected ')' after parameters")
             return None
+
         return params
 
     def parse_action_literal(self):
         if not self.expect_peek(LPAREN):
             return None
+
         parameters = self.parse_action_parameters()
         if parameters is None:
             return None
+
         if not self.expect_peek(COLON):
             return None
+
         body = BlockStatement()
         self.next_token()
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
+
         return ActionLiteral(parameters=parameters, body=body)
 
     def parse_if_statement(self):
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after 'if'")
             return None
+
         self.next_token()
         condition = self.parse_expression(LOWEST)
+
         if not self.expect_peek(RPAREN):
             self.errors.append("Expected ')' after if condition")
             return None
+
         if not self.expect_peek(COLON):
             self.errors.append("Expected ':' after if condition")
             return None
+
         consequence = BlockStatement()
         self.next_token()
         stmt = self.parse_statement()
         if stmt:
             consequence.statements.append(stmt)
+
         alternative = None
         if self.peek_token_is(ELSE):
             self.next_token()
@@ -322,54 +338,70 @@ class Parser:
                 stmt = self.parse_statement()
                 if stmt:
                     alternative.statements.append(stmt)
+
         return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
 
     def parse_while_statement(self):
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after 'while'")
             return None
+
         self.next_token()
         condition = self.parse_expression(LOWEST)
+
         if not self.expect_peek(RPAREN):
             self.errors.append("Expected ')' after while condition")
             return None
+
         if not self.expect_peek(COLON):
             self.errors.append("Expected ':' after while condition")
             return None
+
         body = BlockStatement()
         self.next_token()
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
+
         return WhileStatement(condition=condition, body=body)
 
     def parse_use_statement(self):
         if not self.expect_peek(IDENT):
             self.errors.append("Expected embedded reference after 'use'")
             return None
+
         embedded_ref = Identifier(self.cur_token.literal)
+
         if not self.expect_peek(DOT):
             self.errors.append("Expected '.' after embedded reference")
             return None
+
         if not self.expect_peek(IDENT):
             self.errors.append("Expected method name after '.'")
             return None
+
         method = self.cur_token.literal
+
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after method name")
             return None
+
         arguments = self.parse_expression_list(RPAREN)
         return UseStatement(embedded_ref, method, arguments)
 
     def parse_screen_statement(self):
         stmt = ScreenStatement(name=None, body=None)
+
         if not self.expect_peek(IDENT):
             self.errors.append("Expected screen name after 'screen'")
             return None
+
         stmt.name = Identifier(value=self.cur_token.literal)
+
         if not self.expect_peek(LBRACE):
             self.errors.append("Expected '{' after screen name")
             return None
+
         stmt.body = self.parse_block_statement()
         return stmt
 
@@ -381,25 +413,33 @@ class Parser:
 
     def parse_let_statement(self):
         stmt = LetStatement(name=None, value=None)
+
         if not self.expect_peek(IDENT):
             self.errors.append("Expected variable name after 'let'")
             return None
+
         stmt.name = Identifier(value=self.cur_token.literal)
+
         if not self.expect_peek(ASSIGN):
             self.errors.append("Expected '=' after variable name")
             return None
+
         self.next_token()
         stmt.value = self.parse_expression(LOWEST)
+
         if self.peek_token_is(SEMICOLON):
             self.next_token()
+
         return stmt
 
     def parse_print_statement(self):
         stmt = PrintStatement(value=None)
         self.next_token()
         stmt.value = self.parse_expression(LOWEST)
+
         if self.peek_token_is(SEMICOLON):
             self.next_token()
+
         return stmt
 
     def parse_expression_statement(self):
@@ -409,51 +449,31 @@ class Parser:
         return stmt
 
     def parse_expression(self, precedence):
-    # Check if current token has a prefix parse function
-    if self.cur_token.type not in self.prefix_parse_fns:
-        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found")
-        return None
+        # Check if current token has a prefix parse function
+        if self.cur_token.type not in self.prefix_parse_fns:
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found")
+            return None
 
-    prefix = self.prefix_parse_fns[self.cur_token.type]
-    left_exp = prefix()
-
-    if left_exp is None:
-        return None
-
-    # Continue parsing while we have higher precedence infix operators
-    while (not self.peek_token_is(SEMICOLON) and 
-           not self.peek_token_is(EOF) and  # ✅ ADD EOF check
-           precedence < self.peek_precedence()):
-
-        # Check if the next token has an infix parse function
-        if self.peek_token.type not in self.infix_parse_fns:
-            return left_exp
-
-        # ✅ CRITICAL FIX: Advance to the infix operator BEFORE calling the infix function
-        self.next_token()  # This moves the infix operator to cur_token
-        infix = self.infix_parse_fns[self.cur_token.type]  # Use cur_token.type now
-        left_exp = infix(left_exp)
-
+        prefix = self.prefix_parse_fns[self.cur_token.type]
+        left_exp = prefix()
         if left_exp is None:
             return None
 
-    return left_exp
-
         # Continue parsing while we have higher precedence infix operators
-        while (not self.peek_token_is(SEMICOLON) and 
+        while (not self.peek_token_is(SEMICOLON) and not self.peek_token_is(EOF) and  # ✅ ADD EOF check
                precedence < self.peek_precedence()):
             
             # Check if the next token has an infix parse function
             if self.peek_token.type not in self.infix_parse_fns:
                 return left_exp
-                
-            infix = self.infix_parse_fns[self.peek_token.type]
-            self.next_token()
+
+            # ✅ CRITICAL FIX: Advance to the infix operator BEFORE calling the infix function
+            self.next_token()  # This moves the infix operator to cur_token
+            infix = self.infix_parse_fns[self.cur_token.type]  # Use cur_token.type now
             left_exp = infix(left_exp)
-            
             if left_exp is None:
                 return None
-                
+
         return left_exp
 
     def parse_identifier(self):
@@ -487,20 +507,26 @@ class Parser:
     def parse_map_literal(self):
         pairs = []
         self.next_token()
+
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             key = self.parse_expression(LOWEST)
             if not key:
                 return None
+
             if not self.expect_peek(COLON):
                 return None
+
             self.next_token()
             value = self.parse_expression(LOWEST)
             if not value:
                 return None
+
             pairs.append((key, value))
+
             if self.peek_token_is(COMMA):
                 self.next_token()
             self.next_token()
+
         return MapLiteral(pairs)
 
     def parse_call_expression(self, function):
@@ -530,30 +556,39 @@ class Parser:
 
     def parse_if_expression(self):
         expression = IfExpression(condition=None, consequence=None, alternative=None)
+
         if not self.expect_peek(LPAREN):
             return None
+
         self.next_token()
         expression.condition = self.parse_expression(LOWEST)
+
         if not self.expect_peek(RPAREN):
             return None
+
         if not self.expect_peek(LBRACE):
             return None
+
         expression.consequence = self.parse_block_statement()
+
         if self.peek_token_is(ELSE):
             self.next_token()
             if not self.expect_peek(LBRACE):
                 return None
             expression.alternative = self.parse_block_statement()
+
         return expression
 
     def parse_block_statement(self):
         block = BlockStatement()
         self.next_token()
+
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             stmt = self.parse_statement()
             if stmt is not None:
                 block.statements.append(stmt)
             self.next_token()
+
         return block
 
     def parse_expression_list(self, end):
@@ -561,14 +596,18 @@ class Parser:
         if self.peek_token_is(end):
             self.next_token()
             return elements
+
         self.next_token()
         elements.append(self.parse_expression(LOWEST))
+
         while self.peek_token_is(COMMA):
             self.next_token()
             self.next_token()
             elements.append(self.parse_expression(LOWEST))
+
         if not self.expect_peek(end):
             return elements
+
         return elements
 
     # === TOKEN UTILITIES ===
