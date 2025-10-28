@@ -1,10 +1,10 @@
-# parser.py (DEBUG VERSION)
+# parser.py (COMPLETE FIXED VERSION)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-# Precedence constants
-LOWEST, ASSIGN, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
+# Precedence constants - FIXED: Increased ASSIGN precedence
+LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL, ASSIGN = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS,
@@ -14,7 +14,7 @@ precedences = {
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     DOT: CALL,
-    ASSIGN: ASSIGN,
+    ASSIGN: ASSIGN,  # Now ASSIGN has higher precedence than LOWEST
 }
 
 class Parser:
@@ -64,7 +64,7 @@ class Parser:
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
         print(f"DEBUG: parse_assignment_expression called with left={left}")
-        
+
         # Only allow assignment to identifiers
         if not isinstance(left, Identifier):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
@@ -73,7 +73,7 @@ class Parser:
         expression = AssignmentExpression(name=left, value=None)
         precedence = self.cur_precedence()
         print(f"DEBUG: assignment precedence={precedence}, cur_token={self.cur_token}")
-        
+
         self.next_token()  # Move past the =
 
         # Parse the right-hand side
@@ -456,7 +456,7 @@ class Parser:
     def parse_expression(self, precedence):
         print(f"DEBUG: parse_expression called with precedence={precedence}")
         print(f"DEBUG: cur_token={self.cur_token}, peek_token={self.peek_token}")
-        
+
         # Check if current token has a prefix parse function
         if self.cur_token.type not in self.prefix_parse_fns:
             error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found"
@@ -468,17 +468,18 @@ class Parser:
         print(f"DEBUG: calling prefix function for {self.cur_token.type}")
         left_exp = prefix()
         print(f"DEBUG: prefix result: {left_exp}")
-        
+
         if left_exp is None:
             return None
 
         # Continue parsing while we have higher precedence infix operators
+        # FIXED: Changed from < to <= for right-associative operators like assignment
         while (not self.peek_token_is(SEMICOLON) and 
                not self.peek_token_is(EOF) and 
-               precedence < self.peek_precedence()):
-            
+               precedence <= self.peek_precedence()):  # CHANGED: <= instead of <
+
             print(f"DEBUG: Inside while loop - peek_token={self.peek_token}, peek_precedence={self.peek_precedence()}")
-            
+
             # Check if the next token has an infix parse function
             if self.peek_token.type not in self.infix_parse_fns:
                 print(f"DEBUG: No infix function for {self.peek_token.type}, returning left_exp")
@@ -496,7 +497,7 @@ class Parser:
             print(f"DEBUG: Calling infix function with left={left_exp}")
             left_exp = infix(left_exp)
             print(f"DEBUG: infix result: {left_exp}")
-            
+
             if left_exp is None:
                 return None
 
