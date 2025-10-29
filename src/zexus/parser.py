@@ -62,50 +62,78 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    # NEW: Lambda expression parsing
+    # NEW: Robust lambda expression parsing
     def parse_lambda_expression(self):
-        """Parse lambda expressions: lambda params: expression"""
+        """Parse lambda expressions in   all common formats"""
         token = self.cur_token
         parameters = []
+    
+        self.next_token()  # consume 'lambda'
+    
+    # Check if we have parentheses or if next token is colon (no parameters)
+    if self.cur_token_is(LPAREN):
+        # Format with parentheses:   lambda(), lambda(x), lambda(x, y)
+        self.next_token()  # consume '('
         
-        # Parse parameters (optional parentheses)
-        if self.peek_token_is(LPAREN):
-            self.next_token()  # consume 'lambda'
-            self.next_token()  # consume '('
+        # Check for empty parentheses: lambda()
+        if self.cur_token_is(RPAREN):
+            # No parameters
+            pass
+        else:
+            # Parse parameters inside parentheses
+            if not self.cur_token_is(IDENT):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
+                return None
+                
+            parameters.append(Identifier(self.cur_token.literal))
             
-            if not self.peek_token_is(RPAREN):
-                self.next_token()
+            # Parse additional parameters
+            while self.peek_token_is(COMMA):
+                self.next_token()  # consume identifier
+                self.next_token()  # consume ','
                 if self.cur_token_is(IDENT):
                     parameters.append(Identifier(self.cur_token.literal))
-                    
-                    while self.peek_token_is(COMMA):
-                        self.next_token()  # consume identifier
-                        self.next_token()  # consume ','
-                        if self.cur_token_is(IDENT):
-                            parameters.append(Identifier(self.cur_token.literal))
-                        else:
-                            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
-                            return None
+                else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name after comma")
+                    return None
+        
+        # Expect closing parenthesis
+        if not self.expect_peek(RPAREN):
+            return None
             
-            if not self.expect_peek(RPAREN):
-                return None
-        else:
-            # Single parameter without parentheses: lambda x: x + 1
-            self.next_token()  # consume 'lambda'
+    elif self.cur_token_is(COLON):
+        # Format: lambda: expression (no parameters, no parentheses)
+        # We're already at the colon, so just proceed to body
+        pass
+        
+    elif self.cur_token_is(IDENT):
+        # Format without parentheses: lambda x, lambda x y
+        parameters.append(Identifier(self.cur_token.literal))
+        
+        # Check for additional parameters without parentheses
+        while self.peek_token_is(COMMA):
+            self.next_token()  # consume identifier
+            self.next_token()  # consume ','
             if self.cur_token_is(IDENT):
                 parameters.append(Identifier(self.cur_token.literal))
             else:
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name in lambda")
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name after comma")
                 return None
-        
+    else:
+        # Unexpected token after lambda
+        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameters or ':' after 'lambda'")
+        return None
+    
+    # Now expect the colon (unless we're already on it from lambda: format)
+    if not self.cur_token_is(COLON):
         if not self.expect_peek(COLON):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ':' in lambda expression")
             return None
-        
-        self.next_token()  # consume ':'
-        body = self.parse_expression(LOWEST)
-        
-        return LambdaExpression(parameters=parameters, body=body)
+    
+    self.next_token()  # consume ':'
+    body = self.parse_expression(LOWEST)
+    
+    return LambdaExpression(parameters=parameters, body=body)
 
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
