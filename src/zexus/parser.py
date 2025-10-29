@@ -1,9 +1,9 @@
-# parser.py (COMPLETE FIXED VERSION)
+# parser.py (PRODUCTION READY)
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
 
-# Precedence constants - FIXED: Assignment has LOW precedence (2)
+# Precedence constants
 LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
@@ -14,7 +14,7 @@ precedences = {
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     DOT: CALL,
-    "=": ASSIGN_PREC,  # Assignment has LOW precedence (2)
+    ASSIGN: ASSIGN_PREC,
 }
 
 class Parser:
@@ -23,13 +23,6 @@ class Parser:
         self.errors = []
         self.cur_token = None
         self.peek_token = None
-
-        # Debug: Check token mappings
-        print(f"=== TOKEN DEBUG ===")
-        print(f"ASSIGN constant: '{ASSIGN}'")
-        print(f"'=' in precedences: {'=' in precedences}")
-        print(f"Value for '=': {precedences.get('=', 'NOT FOUND')}")
-        print("===================")
 
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
@@ -46,6 +39,7 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
+            LAMBDA: self.parse_lambda_expression,  # NEW: Lambda support
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -68,25 +62,60 @@ class Parser:
         self.next_token()
         self.next_token()
 
+    # NEW: Lambda expression parsing
+    def parse_lambda_expression(self):
+        """Parse lambda expressions: lambda params: expression"""
+        token = self.cur_token
+        parameters = []
+        
+        # Parse parameters (optional parentheses)
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # consume 'lambda'
+            self.next_token()  # consume '('
+            
+            if not self.peek_token_is(RPAREN):
+                self.next_token()
+                if self.cur_token_is(IDENT):
+                    parameters.append(Identifier(self.cur_token.literal))
+                    
+                    while self.peek_token_is(COMMA):
+                        self.next_token()  # consume identifier
+                        self.next_token()  # consume ','
+                        if self.cur_token_is(IDENT):
+                            parameters.append(Identifier(self.cur_token.literal))
+                        else:
+                            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
+                            return None
+            
+            if not self.expect_peek(RPAREN):
+                return None
+        else:
+            # Single parameter without parentheses: lambda x: x + 1
+            self.next_token()  # consume 'lambda'
+            if self.cur_token_is(IDENT):
+                parameters.append(Identifier(self.cur_token.literal))
+            else:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name in lambda")
+                return None
+        
+        if not self.expect_peek(COLON):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ':' in lambda expression")
+            return None
+        
+        self.next_token()  # consume ':'
+        body = self.parse_expression(LOWEST)
+        
+        return LambdaExpression(parameters=parameters, body=body)
+
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
-        print(f"DEBUG: parse_assignment_expression called with left={left}")
-
-        # Only allow assignment to identifiers
         if not isinstance(left, Identifier):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
             return None
 
         expression = AssignmentExpression(name=left, value=None)
-        precedence = self.cur_precedence()
-        print(f"DEBUG: assignment precedence={precedence}, cur_token={self.cur_token}")
-
         self.next_token()  # Move past the =
-
-        # Parse the right-hand side with LOWEST precedence to allow full expressions
-        print(f"DEBUG: parsing right-hand side of assignment")
         expression.value = self.parse_expression(LOWEST)
-        print(f"DEBUG: assignment result: {expression}")
         return expression
 
     def parse_method_call_expression(self, left):
@@ -138,12 +167,59 @@ class Parser:
                 return self.parse_use_statement()
             elif self.cur_token_is(EXACTLY):
                 return self.parse_exactly_statement()
+            elif self.cur_token_is(EXPORT):  # NEW: Export statement
+                return self.parse_export_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}")
             self.recover_to_next_statement()
             return None
+
+    # NEW: Export statement parsing
+    def parse_export_statement(self):
+        """Parse export statements: export function_name [to file1, file2] [with permission]"""
+        token = self.cur_token
+        
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'export'")
+            return None
+        
+        name = Identifier(self.cur_token.literal)
+        
+        # Parse optional 'to' clause for file restrictions
+        allowed_files = []
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "to":
+            self.next_token()  # consume identifier
+            self.next_token()  # consume 'to'
+            
+            # Parse file list
+            if not self.peek_token_is(STRING):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected file path after 'to'")
+                return None
+            
+            while self.peek_token_is(STRING):
+                self.next_token()
+                allowed_files.append(self.cur_token.literal)
+                
+                if self.peek_token_is(COMMA):
+                    self.next_token()
+                else:
+                    break
+        
+        # Parse optional 'with' clause for permissions
+        permission = "read_only"  # default
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "with":
+            self.next_token()  # consume identifier
+            self.next_token()  # consume 'with'
+            
+            if self.cur_token_is(STRING):
+                permission = self.cur_token.literal
+            else:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected permission string after 'with'")
+                return None
+        
+        return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
     def recover_to_next_statement(self):
         """Skip tokens until we find a statement boundary"""
@@ -378,28 +454,23 @@ class Parser:
         return WhileStatement(condition=condition, body=body)
 
     def parse_use_statement(self):
-        if not self.expect_peek(IDENT):
-            self.errors.append("Expected embedded reference after 'use'")
+        if not self.expect_peek(STRING):
+            self.errors.append("Expected file path after 'use'")
             return None
 
-        embedded_ref = Identifier(self.cur_token.literal)
+        file_path = self.cur_token.literal
 
-        if not self.expect_peek(DOT):
-            self.errors.append("Expected '.' after embedded reference")
-            return None
+        # Check for import alias
+        alias = None
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "as":
+            self.next_token()  # consume string
+            self.next_token()  # consume 'as'
+            if not self.expect_peek(IDENT):
+                self.errors.append("Expected alias name after 'as'")
+                return None
+            alias = self.cur_token.literal
 
-        if not self.expect_peek(IDENT):
-            self.errors.append("Expected method name after '.'")
-            return None
-
-        method = self.cur_token.literal
-
-        if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after method name")
-            return None
-
-        arguments = self.parse_expression_list(RPAREN)
-        return UseStatement(embedded_ref, method, arguments)
+        return UseStatement(file_path=file_path, alias=alias)
 
     def parse_screen_statement(self):
         stmt = ScreenStatement(name=None, body=None)
@@ -461,20 +532,13 @@ class Parser:
         return stmt
 
     def parse_expression(self, precedence):
-        print(f"DEBUG: parse_expression called with precedence={precedence}")
-        print(f"DEBUG: cur_token={self.cur_token}, peek_token={self.peek_token}")
-
         # Check if current token has a prefix parse function
         if self.cur_token.type not in self.prefix_parse_fns:
-            error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found"
-            print(f"DEBUG: {error_msg}")
-            self.errors.append(error_msg)
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Unexpected token '{self.cur_token.literal}'")
             return None
 
         prefix = self.prefix_parse_fns[self.cur_token.type]
-        print(f"DEBUG: calling prefix function for {self.cur_token.type}")
         left_exp = prefix()
-        print(f"DEBUG: prefix result: {left_exp}")
 
         if left_exp is None:
             return None
@@ -484,64 +548,46 @@ class Parser:
                not self.peek_token_is(EOF) and 
                precedence <= self.peek_precedence()):
 
-            print(f"DEBUG: Inside while loop - peek_token={self.peek_token}, peek_precedence={self.peek_precedence()}")
-
             # Check if the next token has an infix parse function
             if self.peek_token.type not in self.infix_parse_fns:
-                print(f"DEBUG: No infix function for {self.peek_token.type}, returning left_exp")
                 return left_exp
 
-            print(f"DEBUG: Found infix function for {self.peek_token.type}")
             # Get the infix function for the peek token
             infix = self.infix_parse_fns[self.peek_token.type]
 
             # Advance to the infix operator
             self.next_token()
-            print(f"DEBUG: Advanced to infix token: {self.cur_token}")
 
             # Parse the infix expression
-            print(f"DEBUG: Calling infix function with left={left_exp}")
             left_exp = infix(left_exp)
-            print(f"DEBUG: infix result: {left_exp}")
 
             if left_exp is None:
                 return None
 
-        print(f"DEBUG: parse_expression returning: {left_exp}")
         return left_exp
 
     def parse_identifier(self):
-        result = Identifier(value=self.cur_token.literal)
-        print(f"DEBUG: parse_identifier returning: {result}")
-        return result
+        return Identifier(value=self.cur_token.literal)
 
     def parse_integer_literal(self):
         try:
-            result = IntegerLiteral(value=int(self.cur_token.literal))
-            print(f"DEBUG: parse_integer_literal returning: {result}")
-            return result
+            return IntegerLiteral(value=int(self.cur_token.literal))
         except ValueError:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Could not parse {self.cur_token.literal} as integer")
             return None
 
     def parse_float_literal(self):
         try:
-            result = FloatLiteral(value=float(self.cur_token.literal))
-            print(f"DEBUG: parse_float_literal returning: {result}")
-            return result
+            return FloatLiteral(value=float(self.cur_token.literal))
         except ValueError:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Could not parse {self.cur_token.literal} as float")
             return None
 
     def parse_string_literal(self):
-        result = StringLiteral(value=self.cur_token.literal)
-        print(f"DEBUG: parse_string_literal returning: {result}")
-        return result
+        return StringLiteral(value=self.cur_token.literal)
 
     def parse_boolean(self):
-        result = Boolean(value=self.cur_token_is(TRUE))
-        print(f"DEBUG: parse_boolean returning: {result}")
-        return result
+        return Boolean(value=self.cur_token_is(TRUE))
 
     def parse_list_literal(self):
         list_lit = ListLiteral(elements=[])
@@ -673,11 +719,7 @@ class Parser:
         return False
 
     def peek_precedence(self):
-        result = precedences.get(self.peek_token.type, LOWEST)
-        print(f"DEBUG: peek_precedence for '{self.peek_token.type}' = {result}")
-        return result
+        return precedences.get(self.peek_token.type, LOWEST)
 
     def cur_precedence(self):
-        result = precedences.get(self.cur_token.type, LOWEST)
-        print(f"DEBUG: cur_precedence for '{self.cur_token.type}' = {result}")
-        return result
+        return precedences.get(self.cur_token.type, LOWEST)
