@@ -1,4 +1,4 @@
-# lexer.py (ENHANCED WITH LINE/COLUMN TRACKING)
+# lexer.py (ENHANCED WITH PHASE 1 KEYWORDS)
 from .zexus_token import *
 
 class Lexer:
@@ -294,8 +294,13 @@ class Lexer:
             "use": USE,
             "exactly": EXACTLY,
             "embedded": EMBEDDED,
-            "export": EXPORT,  # NEW: Added export keyword
-            "lambda": LAMBDA,  # NEW: Added lambda keyword
+            "export": EXPORT,
+            "lambda": LAMBDA,
+            "debug": DEBUG,      # NEW: Debug keyword
+            "try": TRY,          # NEW: Try keyword  
+            "catch": CATCH,      # NEW: Catch keyword
+            "external": EXTERNAL, # NEW: External keyword
+            "from": FROM,        # NEW: From keyword
         }
         return keywords.get(ident, IDENT)
 
