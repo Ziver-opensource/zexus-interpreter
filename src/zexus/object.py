@@ -99,61 +99,61 @@ class Builtin(Object):
 class DateTime(Object):
     def __init__(self, timestamp=None):
         self.timestamp = timestamp or time.time()
-    
+
     def inspect(self):
         return f"<DateTime: {self.timestamp}>"
-    
+
     def type(self):
         return "DATETIME"
-    
+
     @staticmethod
     def now():
         return DateTime(time.time())
-    
+
     def to_timestamp(self):
         return Integer(int(self.timestamp))
-    
+
     def __str__(self):
         return str(self.timestamp)
 
 class Math(Object):
     def type(self):
         return "MATH_UTILITY"
-    
+
     def inspect(self):
         return "<Math utilities>"
-    
+
     @staticmethod
     def random_int(min_val, max_val):
         return Integer(random.randint(min_val, max_val))
-    
+
     @staticmethod
     def to_hex_string(number):
         if isinstance(number, Integer):
             return String(hex(number.value))
         return String(hex(number))
-    
+
     @staticmethod
     def hex_to_int(hex_string):
         if isinstance(hex_string, String):
             return Integer(int(hex_string.value, 16))
         return Integer(int(hex_string, 16))
-    
+
     @staticmethod 
     def sqrt(number):
         if isinstance(number, Integer):
             return Float(number.value ** 0.5)
         elif isinstance(number, Float):
             return Float(number.value ** 0.5)
-        return NULL
+        return Null()
 
 class File(Object):
     def type(self):
         return "FILE_UTILITY"
-    
+
     def inspect(self):
         return "<File I/O utilities>"
-    
+
     # === BASIC TIER ===
     @staticmethod
     def read_text(path):
@@ -164,7 +164,7 @@ class File(Object):
                 return String(f.read())
         except Exception as e:
             return EvaluationError(f"File read error: {str(e)}")
-    
+
     @staticmethod
     def write_text(path, content):
         try:
@@ -174,16 +174,16 @@ class File(Object):
                 content = content.value
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            return TRUE
+            return Boolean(True)
         except Exception as e:
             return EvaluationError(f"File write error: {str(e)}")
-    
+
     @staticmethod
     def exists(path):
         if isinstance(path, String):
             path = path.value
         return Boolean(os.path.exists(path))
-    
+
     # === MEDIUM TIER ===
     @staticmethod
     def read_json(path):
@@ -199,7 +199,7 @@ class File(Object):
             return Map(pairs)
         except Exception as e:
             return EvaluationError(f"JSON read error: {str(e)}")
-    
+
     @staticmethod
     def write_json(path, data):
         try:
@@ -211,7 +211,7 @@ class File(Object):
             return File.write_text(path, String(json_str))
         except Exception as e:
             return EvaluationError(f"JSON write error: {str(e)}")
-    
+
     @staticmethod
     def append_text(path, content):
         try:
@@ -221,10 +221,10 @@ class File(Object):
                 content = content.value
             with open(path, 'a', encoding='utf-8') as f:
                 f.write(content + '\n')
-            return TRUE
+            return Boolean(True)
         except Exception as e:
             return EvaluationError(f"File append error: {str(e)}")
-    
+
     @staticmethod
     def list_directory(path):
         try:
@@ -234,7 +234,7 @@ class File(Object):
             return List([String(f) for f in files])
         except Exception as e:
             return EvaluationError(f"Directory list error: {str(e)}")
-    
+
     # === ADVANCED TIER ===
     @staticmethod
     def read_chunk(path, offset, length):
@@ -245,14 +245,14 @@ class File(Object):
                 offset = offset.value
             if isinstance(length, Integer):
                 length = length.value
-            
+
             with open(path, 'rb') as f:
                 f.seek(offset)
                 data = f.read(length)
                 return String(data.hex())  # Return as hex string
         except Exception as e:
             return EvaluationError(f"File chunk read error: {str(e)}")
-    
+
     @staticmethod
     def write_chunk(path, offset, data):
         try:
@@ -262,67 +262,67 @@ class File(Object):
                 offset = offset.value
             if isinstance(data, String):
                 data = bytes.fromhex(data.value)
-            
+
             with open(path, 'r+b') as f:
                 f.seek(offset)
                 f.write(data)
-            return TRUE
+            return Boolean(True)
         except Exception as e:
             return EvaluationError(f"File chunk write error: {str(e)}")
-    
+
     @staticmethod
     def atomic_write(path, data):
         """Atomic write to prevent corruption"""
         try:
             if isinstance(path, String):
                 path = path.value
-            
+
             # Write to temporary file first
             temp_path = path + '.tmp'
             result = File.write_text(temp_path, data)
-            if result == TRUE:
+            if result == Boolean(True):
                 # Atomic rename
                 os.replace(temp_path, path)
-                return TRUE
+                return Boolean(True)
             return result
         except Exception as e:
             return EvaluationError(f"Atomic write error: {str(e)}")
-    
+
     # File locking for concurrent access
     _file_locks = {}
     _lock = Lock()
-    
+
     @staticmethod
     def lock_file(path):
         """Lock file for exclusive access"""
         try:
             if isinstance(path, String):
                 path = path.value
-            
+
             with File._lock:
                 if path not in File._file_locks:
                     File._file_locks[path] = Lock()
-                
+
                 File._file_locks[path].acquire()
-                return TRUE
+                return Boolean(True)
         except Exception as e:
             return EvaluationError(f"File lock error: {str(e)}")
-    
+
     @staticmethod
     def unlock_file(path):
         """Unlock file"""
         try:
             if isinstance(path, String):
                 path = path.value
-            
+
             with File._lock:
                 if path in File._file_locks:
                     File._file_locks[path].release()
-                    return TRUE
-                return FALSE
+                    return Boolean(True)
+                return Boolean(False)
         except Exception as e:
             return EvaluationError(f"File unlock error: {str(e)}")
-    
+
     # Helper methods for data conversion
     @staticmethod
     def _python_to_zexus(value):
@@ -343,7 +343,7 @@ class File(Object):
             return Boolean(value)
         else:
             return String(str(value))
-    
+
     @staticmethod
     def _zexus_to_python(value):
         if isinstance(value, Map):
@@ -358,7 +358,7 @@ class File(Object):
             return value.value
         elif isinstance(value, Boolean):
             return value.value
-        elif value == NULL:
+        elif value == Null():
             return None
         else:
             return str(value)
@@ -367,35 +367,35 @@ class File(Object):
 class Debug(Object):
     def type(self):
         return "DEBUG_UTILITY"
-    
+
     def inspect(self):
         return "<Debug utilities>"
-    
+
     @staticmethod
     def log(message, value=None):
         """Log debug information with optional value"""
         if isinstance(message, String):
             message = message.value
-        
+
         debug_msg = f"🔍 DEBUG: {message}"
         if value is not None:
             debug_msg += f" → {value.inspect() if hasattr(value, 'inspect') else value}"
-        
+
         print(debug_msg)
-        return value if value is not None else TRUE
-    
+        return value if value is not None else Boolean(True)
+
     @staticmethod
     def trace(message):
         """Add stack trace to debug output"""
         import traceback
         if isinstance(message, String):
             message = message.value
-        
+
         print(f"🔍 TRACE: {message}")
         print("Stack trace:")
         for line in traceback.format_stack()[:-1]:
             print(f"  {line.strip()}")
-        return TRUE
+        return Boolean(True)
 
 class Environment:
     def __init__(self, outer=None):
@@ -428,4 +428,27 @@ class Environment:
     def disable_debug(self):
         self.debug_mode = False
 
-NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
+# Global constants
+NULL = Null()
+TRUE = Boolean(True)
+FALSE = Boolean(False)
+
+# EvaluationError class for error handling
+class EvaluationError(Object):
+    def __init__(self, message, line=None, column=None, stack_trace=None):
+        self.message = message
+        self.line = line
+        self.column = column
+        self.stack_trace = stack_trace or []
+
+    def inspect(self):
+        return f"❌ Error: {self.message}"
+
+    def type(self):
+        return "ERROR"
+
+    def __str__(self):
+        location = f"Line {self.line}:{self.column}" if self.line and self.column else "Unknown location"
+        trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
+        trace_section = f"\n   Stack:\n{trace}" if trace else ""
+        return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
