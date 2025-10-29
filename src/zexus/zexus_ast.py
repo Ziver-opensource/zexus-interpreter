@@ -1,4 +1,4 @@
-# zexus_ast.py (ENHANCED WITH ASSIGNMENT & PROPERTY ACCESS)
+# zexus_ast.py (ENHANCED WITH PHASE 1 NODES)
 
 # Base classes
 class Node: 
@@ -118,13 +118,43 @@ class ExactlyStatement(Statement):
     def __repr__(self):
         return f"ExactlyStatement(name={self.name})"
 
-# NEW: Export statement
+# Export statement
 class ExportStatement(Statement):
-    def __init__(self, name):
+    def __init__(self, name, allowed_files=None, permission=None):
         self.name = name
+        self.allowed_files = allowed_files or []
+        self.permission = permission or "read_only"
 
     def __repr__(self):
-        return f"ExportStatement(name={self.name})"
+        return f"ExportStatement(name={self.name}, files={len(self.allowed_files)}, permission='{self.permission}')"
+
+# NEW: Debug statement
+class DebugStatement(Statement):
+    def __init__(self, value):
+        self.value = value
+    
+    def __repr__(self):
+        return f"DebugStatement(value={self.value})"
+
+# NEW: Try-catch statement  
+class TryCatchStatement(Statement):
+    def __init__(self, try_block, error_variable, catch_block):
+        self.try_block = try_block
+        self.error_variable = error_variable
+        self.catch_block = catch_block
+    
+    def __repr__(self):
+        return f"TryCatchStatement(error_var={self.error_variable})"
+
+# NEW: External function declaration
+class ExternalDeclaration(Statement):
+    def __init__(self, name, parameters, module_path):
+        self.name = name
+        self.parameters = parameters
+        self.module_path = module_path
+    
+    def __repr__(self):
+        return f"ExternalDeclaration(name={self.name}, module={self.module_path})"
 
 # Expression Nodes
 class Identifier(Expression):
@@ -184,7 +214,7 @@ class ActionLiteral(Expression):
     def __repr__(self):
         return f"ActionLiteral(parameters={len(self.parameters)})"
 
-# NEW: Lambda expression
+# Lambda expression
 class LambdaExpression(Expression):
     def __init__(self, parameters, body):
         self.parameters = parameters
