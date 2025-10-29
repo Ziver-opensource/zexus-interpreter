@@ -1,4 +1,4 @@
-# zexus_token.py (ENHANCED WITH LINE/COLUMN TRACKING)
+# zexus_token.py (ENHANCED WITH PHASE 1 TOKENS)
 
 # Special Tokens
 ILLEGAL = "ILLEGAL"
@@ -57,8 +57,13 @@ WHILE = "WHILE"
 USE = "USE"
 EXACTLY = "EXACTLY"
 EMBEDDED = "EMBEDDED"
-EXPORT = "EXPORT"  # NEW: Added export token
-LAMBDA = "LAMBDA"  # NEW: Added lambda token
+EXPORT = "EXPORT"
+LAMBDA = "LAMBDA"
+DEBUG = "DEBUG"      # NEW: Debug token
+TRY = "TRY"          # NEW: Try token
+CATCH = "CATCH"      # NEW: Catch token
+EXTERNAL = "EXTERNAL" # NEW: External token
+FROM = "FROM"        # NEW: From token
 
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):
