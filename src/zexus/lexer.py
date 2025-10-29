@@ -17,14 +17,14 @@ class Lexer:
             self.ch = ""
         else:
             self.ch = self.input[self.read_position]
-        
+
         # Update line and column tracking
         if self.ch == '\n':
             self.line += 1
             self.column = 1
         else:
             self.column += 1
-            
+
         self.position = self.read_position
         self.read_position += 1
 
@@ -294,6 +294,8 @@ class Lexer:
             "use": USE,
             "exactly": EXACTLY,
             "embedded": EMBEDDED,
+            "export": EXPORT,  # NEW: Added export keyword
+            "lambda": LAMBDA,  # NEW: Added lambda keyword
         }
         return keywords.get(ident, IDENT)
 
