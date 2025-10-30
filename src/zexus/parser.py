@@ -1,4 +1,4 @@
-# parser.py (ULTRA-FLEXIBLE COMPLETE VERSION)
+# parser.py (ULTRA-FLEXIBLE COMPLETE VERSION - FINAL FIX)
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
@@ -89,7 +89,7 @@ class Parser:
 
         return DebugStatement(value=value)
 
-    # ULTRA-FLEXIBLE: Try-catch statement parsing - NOW FLEXIBLE WITH : AND {}
+    # ULTRA-FLEXIBLE: Try-catch statement parsing - FINAL FIX
     def parse_try_catch_statement(self):
         """Parse try-catch statements: try { code } catch error { handle } OR try: code catch error: handle"""
         try_token = self.cur_token
@@ -99,8 +99,20 @@ class Parser:
         if not try_block:
             return None
 
-        # Expect catch
-        if not self.expect_peek(CATCH):
+        # FIX: Handle the case where we have } before catch (when using braces)
+        if self.cur_token_is(RBRACE):
+            self.next_token()  # consume the }
+
+        # Expect catch - but be more flexible about it
+        if not self.cur_token_is(CATCH):
+            # If we don't have catch immediately, check if next token is catch
+            if not self.peek_token_is(CATCH):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
+                return None
+            self.next_token()  # move to catch
+
+        # Now we should be at CATCH token
+        if not self.cur_token_is(CATCH):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
             return None
 
