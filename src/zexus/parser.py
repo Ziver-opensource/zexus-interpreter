@@ -173,7 +173,7 @@ class Parser:
 
         # Parse parameters (ULTRA FLEXIBLE: handle all cases)
         parameters = []
-        
+
         # Case 1: No parameters at all
         if self.peek_token_is(FROM) or (self.peek_token_is(MINUS) and self.lexer.peek_char() == '>'):
             # No parameters, just proceed
@@ -418,7 +418,7 @@ class Parser:
 
     # ULTRA-FLEXIBLE: If statement parsing - FIXED VERSION
     def parse_if_statement(self):
-    # Handle if with or without parentheses
+        # Handle if with or without parentheses
         if self.peek_token_is(LPAREN):
             if not self.expect_peek(LPAREN):
                 return None
@@ -431,24 +431,24 @@ class Parser:
             condition = self.parse_expression(LOWEST)
 
         if not condition:
-                return None
+            return None
 
-    # ULTRA FLEXIBLE: Check if we already have a colon
+        # ULTRA FLEXIBLE: Check if we already have a colon
         if self.cur_token_is(COLON):
-        # We're already at the colon - just consume it
+            # We're already at the colon - just consume it
             self.next_token()
         elif self.peek_token_is(COLON):
-        # Colon is next - consume it
-        if not self.expect_peek(COLON):
-            return None
+            # Colon is next - consume it
+            if not self.expect_peek(COLON):
+                return None
         elif self.peek_token_is(LBRACE):
-        # Brace is next - just proceed
+            # Brace is next - just proceed
             pass
         else:
-        # No colon or brace - assume single statement follows
+            # No colon or brace - assume single statement follows
             pass
 
-    # Parse consequence (ULTRA FLEXIBLE: block or single statement)
+        # Parse consequence (ULTRA FLEXIBLE: block or single statement)
         if self.cur_token_is(LBRACE):
             consequence = self.parse_block_statement()
         else:
@@ -460,30 +460,30 @@ class Parser:
         alternative = None
         if self.peek_token_is(ELSE):
             self.next_token()
-        if self.peek_token_is(IF):
-            self.next_token()
-            alternative = self.parse_if_statement()
-        else:
-            # Handle else with or without colon/brace
-            if self.cur_token_is(COLON):
-                # Already at colon
+            if self.peek_token_is(IF):
                 self.next_token()
-            elif self.peek_token_is(COLON):
-                if not self.expect_peek(COLON):
-                    return None
-            elif self.peek_token_is(LBRACE):
-                # Direct brace without colon
-                pass
-
-            if self.cur_token_is(LBRACE):
-                alternative = self.parse_block_statement()
+                alternative = self.parse_if_statement()
             else:
-                alternative = BlockStatement()
-                stmt = self.parse_statement()
-                if stmt:
-                    alternative.statements.append(stmt)
+                # Handle else with or without colon/brace
+                if self.cur_token_is(COLON):
+                    # Already at colon
+                    self.next_token()
+                elif self.peek_token_is(COLON):
+                    if not self.expect_peek(COLON):
+                        return None
+                elif self.peek_token_is(LBRACE):
+                    # Direct brace without colon
+                    pass
 
-    return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+                if self.cur_token_is(LBRACE):
+                    alternative = self.parse_block_statement()
+                else:
+                    alternative = BlockStatement()
+                    stmt = self.parse_statement()
+                    if stmt:
+                        alternative.statements.append(stmt)
+
+        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
 
     def parse_embedded_literal(self):
         """Parse: embedded {language code} """
@@ -499,7 +499,6 @@ class Parser:
         if not lines:
             self.errors.append("Empty embedded code block")
             return None
-
         language_line = lines[0].strip()
         language = language_line if language_line else "unknown"
         code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
