@@ -1,4 +1,4 @@
-# parser.py (ULTIMATE MULTI-STRATEGY PARSER)
+# parser.py (TOLERANT MULTI-STRATEGY PARSER)
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
@@ -83,22 +83,28 @@ class UltimateParser:
         self.next_token()
 
     def parse_program(self):
-        """The ultimate parsing pipeline with multi-strategy support"""
+        """The tolerant parsing pipeline - FIXED"""
+        # For simple files or when advanced parsing is disabled, use traditional
         if not self.use_advanced_parsing:
             return self._parse_traditional()
 
         try:
-            print("🎯 Starting Ultimate Parsing Pipeline...")
+            print("🎯 Starting Tolerant Parsing Pipeline...")
 
-            # Phase 1: Structural Analysis
+            # Phase 1: Structural Analysis (for context only)
             all_tokens = self._collect_all_tokens()
             self.block_map = self.structural_analyzer.analyze(all_tokens)
             self.structural_analyzer.print_structure()
 
-            # Phase 2: Smart Parsing with Context Awareness
-            program = self._parse_with_advanced_strategies(all_tokens)
+            # Phase 2: Parse ALL blocks, not just "significant" ones
+            program = self._parse_all_blocks_tolerantly(all_tokens)
 
-            print(f"✅ Ultimate Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors")
+            # If advanced parsing didn't find anything, fall back to traditional
+            if len(program.statements) == 0 and len(all_tokens) > 10:
+                print("🔄 Advanced parsing found no statements, falling back to traditional...")
+                return self._parse_traditional()
+
+            print(f"✅ Tolerant Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors")
             return program
 
         except Exception as e:
@@ -133,34 +139,59 @@ class UltimateParser:
 
         return tokens
 
-    def _parse_with_advanced_strategies(self, all_tokens):
-        """Parse using advanced multi-strategy approach - SIMPLIFIED"""
+    def _parse_all_blocks_tolerantly(self, all_tokens):
+        """Parse ALL blocks without aggressive filtering - MAXIMUM TOLERANCE"""
         program = Program()
         parsed_count = 0
         error_count = 0
 
-        # Only parse significant blocks to avoid noise
-        significant_blocks = [
+        # Parse ALL top-level blocks, not just "significant" ones
+        top_level_blocks = [
             block_id for block_id, block_info in self.block_map.items()
-            if (block_info.get('subtype') in ['function', 'try_catch', 'conditional', 'screen'] 
-                or block_info['type'] == 'brace_block')
-            and not block_info.get('parent')  # Only top-level blocks
+            if not block_info.get('parent')  # Only top-level blocks
         ]
 
-        print(f"🎯 Parsing {len(significant_blocks)} significant blocks out of {len(self.block_map)} total")
+        print(f"🎯 Parsing {len(top_level_blocks)} top-level blocks (tolerant mode)")
 
-        for block_id in significant_blocks:
+        for block_id in top_level_blocks:
             block_info = self.block_map[block_id]
             try:
                 statement = self.context_parser.parse_block(block_info, all_tokens)
                 if statement:
                     program.statements.append(statement)
                     parsed_count += 1
+                    # Debug output for what was parsed
+                    stmt_type = type(statement).__name__
+                    print(f"  ✅ Parsed: {stmt_type} at line {block_info['start_token'].line}")
 
             except Exception as e:
-                error_msg = f"Line {block_info['start_token'].line}: Error parsing {block_info.get('subtype', 'block')}: {str(e)}"
+                error_msg = f"Line {block_info['start_token'].line}: {str(e)}"
                 self.errors.append(error_msg)
                 error_count += 1
+                print(f"  ❌ Parse error: {error_msg}")
+
+        # If we still have no statements but there are tokens, try traditional parsing on the problematic blocks
+        if parsed_count == 0 and top_level_blocks:
+            print("🔄 No blocks parsed with context parser, trying traditional fallback...")
+            for block_id in top_level_blocks[:3]:  # Try first 3 blocks
+                block_info = self.block_map[block_id]
+                try:
+                    # Extract tokens for this block and parse traditionally
+                    block_tokens = block_info['tokens']
+                    if block_tokens:
+                        # Create a mini-lexer for just these tokens
+                        block_code = ' '.join([t.literal for t in block_tokens if t.literal])
+                        mini_lexer = Lexer(block_code)
+                        mini_parser = UltimateParser(mini_lexer, self.syntax_style, False)
+                        mini_program = mini_parser.parse_program()
+                        
+                        if mini_program.statements:
+                            program.statements.extend(mini_program.statements)
+                            parsed_count += len(mini_program.statements)
+                            print(f"  ✅ Traditional fallback parsed {len(mini_program.statements)} statements")
+                            
+                except Exception as e:
+                    print(f"  ❌ Traditional fallback also failed: {e}")
 
         print(f"✅ Successfully parsed {parsed_count} statements with {error_count} errors")
         return program
@@ -175,10 +206,10 @@ class UltimateParser:
             self.next_token()
         return program
 
-    # === TRADITIONAL PARSER METHODS (for compatibility) ===
+    # === TOLERANT PARSER METHODS ===
 
     def parse_statement(self):
-        """Parse statement with error recovery"""
+        """Parse statement with maximum tolerance"""
         try:
             if self.cur_token_is(LET):
                 return self.parse_let_statement()
@@ -211,27 +242,176 @@ class UltimateParser:
             else:
                 return self.parse_expression_statement()
         except Exception as e:
+            # TOLERANT: Don't stop execution for parse errors, just log and continue
             error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}"
             self.errors.append(error_msg)
+            print(f"⚠️  {error_msg}")
 
-            # Use error recovery if available
-            if self.use_advanced_parsing:
-                recovery_plan = self.error_recovery.create_recovery_plan(
-                    e, None, [self.cur_token], 0
-                )
-                if recovery_plan['can_recover']:
-                    return recovery_plan['recovered_statement']
-
+            # Try to recover and continue
             self.recover_to_next_statement()
             return None
 
+    def parse_block(self, block_type=""):
+        """Unified block parser with maximum tolerance for both syntax styles"""
+        # For universal syntax, require braces
+        if self.syntax_style == "universal":
+            if self.peek_token_is(LBRACE):
+                if not self.expect_peek(LBRACE):
+                    return None
+                return self.parse_brace_block()
+            else:
+                # In universal mode, if no brace, treat as single statement
+                return self.parse_single_statement_block()
+        
+        # For tolerable/auto mode, accept both styles
+        if self.peek_token_is(LBRACE):
+            if not self.expect_peek(LBRACE):
+                return None
+            return self.parse_brace_block()
+        elif self.peek_token_is(COLON):
+            if not self.expect_peek(COLON):
+                return None
+            return self.parse_single_statement_block()
+        else:
+            # TOLERANT: If no block indicator, assume single statement
+            return self.parse_single_statement_block()
+
+    def parse_brace_block(self):
+        """Parse { } block with tolerance for missing closing brace"""
+        block = BlockStatement()
+        self.next_token()
+
+        brace_count = 1
+        while brace_count > 0 and not self.cur_token_is(EOF):
+            if self.cur_token_is(LBRACE):
+                brace_count += 1
+            elif self.cur_token_is(RBRACE):
+                brace_count -= 1
+                if brace_count == 0:
+                    break
+            
+            stmt = self.parse_statement()
+            if stmt is not None:
+                block.statements.append(stmt)
+            self.next_token()
+
+        # TOLERANT: Don't error if we hit EOF without closing brace
+        if self.cur_token_is(EOF) and brace_count > 0:
+            self.errors.append(f"Line {self.cur_token.line}: Unclosed block (reached EOF)")
+
+        return block
+
+    def parse_single_statement_block(self):
+        """Parse a single statement as a block"""
+        block = BlockStatement()
+        # Don't consume the next token if it's the end of a structure
+        if not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            stmt = self.parse_statement()
+            if stmt:
+                block.statements.append(stmt)
+        return block
+
+    def parse_if_statement(self):
+        """Tolerant if statement parser"""
+        # Skip IF token
+        self.next_token()
+
+        # Parse condition (with or without parentheses)
+        if self.cur_token_is(LPAREN):
+            self.next_token()  # Skip (
+            condition = self.parse_expression(LOWEST)
+            if self.cur_token_is(RPAREN):
+                self.next_token()  # Skip )
+        else:
+            # No parentheses - parse expression directly
+            condition = self.parse_expression(LOWEST)
+
+        if not condition:
+            self.errors.append("Expected condition after 'if'")
+            return None
+
+        # Parse consequence (flexible block style)
+        consequence = self.parse_block("if")
+        if not consequence:
+            return None
+
+        alternative = None
+        if self.cur_token_is(ELSE):
+            self.next_token()
+            alternative = self.parse_block("else")
+
+        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+
+    def parse_action_statement(self):
+        """Tolerant action parser supporting both syntax styles"""
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected function name after 'action'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+
+        # Parse parameters (with or without parentheses)
+        parameters = []
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # Skip to (
+            self.next_token()  # Skip (
+            parameters = self.parse_action_parameters()
+            if parameters is None:
+                return None
+        elif self.peek_token_is(IDENT):
+            # Single parameter without parentheses
+            self.next_token()
+            parameters = [Identifier(self.cur_token.literal)]
+
+        # Parse body (flexible style)
+        body = self.parse_block("action")
+        if not body:
+            return None
+
+        return ActionStatement(name=name, parameters=parameters, body=body)
+
+    def parse_let_statement(self):
+        """Tolerant let statement parser"""
+        stmt = LetStatement(name=None, value=None)
+
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected variable name after 'let'")
+            return None
+
+        stmt.name = Identifier(value=self.cur_token.literal)
+
+        # TOLERANT: Allow both = and : for assignment
+        if self.peek_token_is(ASSIGN) or (self.peek_token_is(COLON) and self.peek_token.literal == ":"):
+            self.next_token()
+        else:
+            self.errors.append("Expected '=' or ':' after variable name")
+            return None
+
+        self.next_token()
+        stmt.value = self.parse_expression(LOWEST)
+
+        # TOLERANT: Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return stmt
+
+    def parse_print_statement(self):
+        """Tolerant print statement parser"""
+        stmt = PrintStatement(value=None)
+        self.next_token()
+        stmt.value = self.parse_expression(LOWEST)
+
+        # TOLERANT: Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return stmt
+
+    # === REST OF PARSER METHODS (with tolerant modifications) ===
+
     def parse_try_catch_statement(self):
         """Enhanced try-catch parsing with structural awareness"""
-        if self.use_advanced_parsing:
-            # Let structural analyzer handle this if possible
-            pass
-
-        # Traditional implementation
         try_token = self.cur_token
         try_block = self.parse_block("try")
         if not try_block:
@@ -269,76 +449,24 @@ class UltimateParser:
             catch_block=catch_block
         )
 
-    def parse_block(self, block_type=""):
-        """Unified block parser"""
-        if self.syntax_style == "universal":
-            if not self.expect_peek(LBRACE):
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Universal syntax requires {{ }} for {block_type} blocks")
-                return None
-            return self.parse_brace_block()
-
-        if self.peek_token_is(LBRACE):
-            if not self.expect_peek(LBRACE):
-                return None
-            return self.parse_brace_block()
-        elif self.peek_token_is(COLON):
-            if not self.expect_peek(COLON):
-                return None
-            return self.parse_single_statement_block()
-        else:
-            return self.parse_single_statement_block()
-
-    def parse_brace_block(self):
-        block = BlockStatement()
-        self.next_token()
-
-        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-            stmt = self.parse_statement()
-            if stmt is not None:
-                block.statements.append(stmt)
-            self.next_token()
-
-        return block
-
-    def parse_single_statement_block(self):
-        block = BlockStatement()
-        self.next_token()
-        stmt = self.parse_statement()
-        if stmt:
-            block.statements.append(stmt)
-        return block
-
-    # === REST OF TRADITIONAL PARSER METHODS ===
-
     def parse_debug_statement(self):
         token = self.cur_token
         self.next_token()
 
-        if self.syntax_style == "universal":
-            if not self.cur_token_is(LPAREN):
-                self.errors.append(f"Line {token.line}:{token.column} - Universal syntax requires debug(expression)")
-                return None
+        # TOLERANT: Accept both debug expr and debug(expr)
+        if self.cur_token_is(LPAREN):
             self.next_token()
             value = self.parse_expression(LOWEST)
             if not value:
                 self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
                 return None
-            if not self.expect_peek(RPAREN):
-                return None
-        else:
-            if self.cur_token_is(LPAREN):
+            if self.cur_token_is(RPAREN):
                 self.next_token()
-                value = self.parse_expression(LOWEST)
-                if not value:
-                    self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
-                    return None
-                if not self.expect_peek(RPAREN):
-                    return None
-            else:
-                value = self.parse_expression(LOWEST)
-                if not value:
-                    self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
-                    return None
+        else:
+            value = self.parse_expression(LOWEST)
+            if not value:
+                self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
+                return None
 
         return DebugStatement(value=value)
 
@@ -381,6 +509,7 @@ class UltimateParser:
         )
 
     def recover_to_next_statement(self):
+        """Tolerant error recovery"""
         while not self.cur_token_is(EOF):
             if self.cur_token_is(SEMICOLON):
                 return
@@ -500,39 +629,6 @@ class UltimateParser:
                 return None
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
-    def parse_if_statement(self):
-        if self.peek_token_is(LPAREN):
-            if not self.expect_peek(LPAREN):
-                return None
-            self.next_token()
-            condition = self.parse_expression(LOWEST)
-            if not condition:
-                return None
-            if not self.expect_peek(RPAREN):
-                return None
-        else:
-            self.next_token()
-            condition = self.parse_expression(LOWEST)
-            if not condition:
-                return None
-
-        consequence = self.parse_block("if")
-        if not consequence:
-            return None
-
-        alternative = None
-        if self.peek_token_is(ELSE):
-            self.next_token()
-            if self.peek_token_is(IF):
-                self.next_token()
-                alternative = self.parse_if_statement()
-            else:
-                alternative = self.parse_block("else")
-                if not alternative:
-                    return None
-
-        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
-
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):
             return None
@@ -609,27 +705,6 @@ class UltimateParser:
 
         stmt.body = body
         return stmt
-
-    def parse_action_statement(self):
-        if not self.expect_peek(IDENT):
-            self.errors.append("Expected function name after 'action'")
-            return None
-
-        name = Identifier(self.cur_token.literal)
-
-        if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after function name")
-            return None
-
-        parameters = self.parse_action_parameters()
-        if parameters is None:
-            return None
-
-        body = self.parse_block("action")
-        if not body:
-            return None
-
-        return ActionStatement(name=name, parameters=parameters, body=body)
 
     def parse_action_parameters(self):
         params = []
@@ -732,37 +807,6 @@ class UltimateParser:
         stmt = ReturnStatement(return_value=None)
         self.next_token()
         stmt.return_value = self.parse_expression(LOWEST)
-        return stmt
-
-    def parse_let_statement(self):
-        stmt = LetStatement(name=None, value=None)
-
-        if not self.expect_peek(IDENT):
-            self.errors.append("Expected variable name after 'let'")
-            return None
-
-        stmt.name = Identifier(value=self.cur_token.literal)
-
-        if not self.expect_peek(ASSIGN):
-            self.errors.append("Expected '=' after variable name")
-            return None
-
-        self.next_token()
-        stmt.value = self.parse_expression(LOWEST)
-
-        if self.peek_token_is(SEMICOLON):
-            self.next_token()
-
-        return stmt
-
-    def parse_print_statement(self):
-        stmt = PrintStatement(value=None)
-        self.next_token()
-        stmt.value = self.parse_expression(LOWEST)
-
-        if self.peek_token_is(SEMICOLON):
-            self.next_token()
-
         return stmt
 
     def parse_expression_statement(self):
