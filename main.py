@@ -29,4 +29,8 @@ if __name__ == "__main__":
         # Add default syntax style
         sys.argv.append('--syntax-style=auto')
 
+    # Enable advanced parsing by default
+    if not any('--no-advanced-parsing' in arg for arg in sys.argv):
+        sys.argv.append('--advanced-parsing')
+
     cli()
