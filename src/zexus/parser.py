@@ -1,7 +1,10 @@
-# parser.py (FIXED DUAL SYNTAX SUPPORT)
+# parser.py (ULTIMATE MULTI-STRATEGY PARSER)
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
+from .strategy_structural import StructuralAnalyzer
+from .strategy_context import ContextStackParser
+from .strategy_recovery import ErrorRecoveryEngine
 
 # Precedence constants
 LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
@@ -17,14 +20,27 @@ precedences = {
     ASSIGN: ASSIGN_PREC,
 }
 
-class Parser:
-    def __init__(self, lexer, syntax_style="universal"):
+class UltimateParser:
+    def __init__(self, lexer, syntax_style="universal", enable_advanced_strategies=True):
         self.lexer = lexer
-        self.syntax_style = syntax_style  # "universal" or "tolerable"
+        self.syntax_style = syntax_style
+        self.enable_advanced_strategies = enable_advanced_strategies
         self.errors = []
         self.cur_token = None
         self.peek_token = None
-
+        
+        # Multi-strategy architecture
+        if enable_advanced_strategies:
+            print("🚀 Initializing Ultimate Parser with Multi-Strategy Architecture...")
+            self.structural_analyzer = StructuralAnalyzer()
+            self.context_parser = ContextStackParser(self.structural_analyzer)
+            self.error_recovery = ErrorRecoveryEngine(self.structural_analyzer, self.context_parser)
+            self.block_map = {}
+            self.use_advanced_parsing = True
+        else:
+            self.use_advanced_parsing = False
+            
+        # Traditional parser setup (fallback)
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
             INT: self.parse_integer_literal,
@@ -66,189 +82,98 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    def parse_debug_statement(self):
-        """Parse debug statements with syntax style awareness"""
-        token = self.cur_token
-        self.next_token()  # consume 'debug'
-
-        # UNIVERSAL: Always require parentheses
-        if self.syntax_style == "universal":
-            if not self.cur_token_is(LPAREN):
-                self.errors.append(f"Line {token.line}:{token.column} - Universal syntax requires debug(expression)")
-                return None
+    def parse_program(self):
+        """The ultimate parsing pipeline with multi-strategy support"""
+        if not self.use_advanced_parsing:
+            return self._parse_traditional()
             
-            self.next_token()  # consume '('
-            value = self.parse_expression(LOWEST)
-            if not value:
-                self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
-                return None
-            if not self.expect_peek(RPAREN):
-                return None
-        else:
-            # TOLERABLE: Flexible syntax
-            if self.cur_token_is(LPAREN):
-                self.next_token()  # consume '('
-                value = self.parse_expression(LOWEST)
-                if not value:
-                    self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
-                    return None
-                if not self.expect_peek(RPAREN):
-                    return None
-            else:
-                # Handle debug expression or debug "message"
-                value = self.parse_expression(LOWEST)
-                if not value:
-                    self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
-                    return None
+        try:
+            print("🎯 Starting Ultimate Parsing Pipeline...")
+            
+            # Phase 1: Structural Analysis
+            all_tokens = self._collect_all_tokens()
+            self.block_map = self.structural_analyzer.analyze(all_tokens)
+            self.structural_analyzer.print_structure()
+            
+            # Phase 2: Smart Parsing with Context Awareness
+            program = self._parse_with_advanced_strategies(all_tokens)
+            
+            print(f"✅ Ultimate Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors")
+            return program
+            
+        except Exception as e:
+            print(f"⚠️ Advanced parsing failed, falling back to traditional: {e}")
+            self.use_advanced_parsing = False
+            return self._parse_traditional()
 
-        return DebugStatement(value=value)
-
-    def parse_try_catch_statement(self):
-        """FIXED: Clean try-catch parsing with syntax awareness"""
-        try_token = self.cur_token
-
-        # Parse try block
-        try_block = self.parse_block("try")
-        if not try_block:
-            return None
-
-        # FIXED: Check if we're already at CATCH token
-        if self.cur_token_is(CATCH):
-            # We're already at catch, no need to expect_peek
-            pass
-        elif not self.expect_peek(CATCH):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
-            return None
-        else:
-            # We moved to catch via expect_peek
-            pass
-
-        # Now we should be at CATCH token
-        if not self.cur_token_is(CATCH):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
-            return None
-
-        # Parse catch parameter
-        error_var = None
-
-        # FIXED: Handle catch parameter parsing more carefully
-        if self.peek_token_is(LPAREN):
-            # catch (error) syntax
-            self.next_token()  # consume 'catch'
-            self.next_token()  # consume '('
-            if not self.cur_token_is(IDENT):
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected error variable name after 'catch('")
-                return None
-            error_var = Identifier(self.cur_token.literal)
-            if not self.expect_peek(RPAREN):
-                return None
-        elif self.peek_token_is(IDENT):
-            # catch error syntax (without parentheses)
-            self.next_token()  # consume 'catch'
-            error_var = Identifier(self.cur_token.literal)
-        else:
-            # catch without specific error variable
-            error_var = Identifier("error")
-            # Don't consume any token - we're already at the catch block
-
-        # Parse catch block
-        catch_block = self.parse_block("catch")
-        if not catch_block:
-            return None
-
-        return TryCatchStatement(
-            try_block=try_block,
-            error_variable=error_var,
-            catch_block=catch_block
-        )
-
-    def parse_block(self, block_type=""):
-        """FIXED: Unified block parser that respects syntax style"""
-        # UNIVERSAL: Always require braces
-        if self.syntax_style == "universal":
-            if not self.expect_peek(LBRACE):
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Universal syntax requires {{ }} for {block_type} blocks")
-                return None
-            return self.parse_brace_block()
+    def _collect_all_tokens(self):
+        """Collect all tokens for structural analysis"""
+        tokens = []
+        original_position = self.lexer.position
+        original_cur = self.cur_token
+        original_peek = self.peek_token
         
-        # TOLERABLE: Flexible block syntax
-        if self.peek_token_is(LBRACE):
-            if not self.expect_peek(LBRACE):
-                return None
-            return self.parse_brace_block()
-        elif self.peek_token_is(COLON):
-            if not self.expect_peek(COLON):
-                return None
-            return self.parse_single_statement_block()
-        else:
-            # Single statement without colon or brace
-            return self.parse_single_statement_block()
+        # Reset lexer to beginning
+        self.lexer.position = 0
+        self.lexer.read_position = 0
+        self.lexer.ch = ''
+        self.lexer.read_char()
+        
+        # Collect all tokens
+        while True:
+            token = self.lexer.next_token()
+            tokens.append(token)
+            if token.type == EOF:
+                break
+        
+        # Restore parser state
+        self.lexer.position = original_position
+        self.cur_token = original_cur
+        self.peek_token = original_peek
+        
+        return tokens
 
-    def parse_brace_block(self):
-        """Parse { } block"""
-        block = BlockStatement()
-        self.next_token()  # consume {
+    def _parse_with_advanced_strategies(self, all_tokens):
+        """Parse using advanced multi-strategy approach"""
+        program = Program()
+        
+        # Parse top-level blocks using structural awareness
+        for block_id, block_info in self.block_map.items():
+            try:
+                if block_info.get('parent'):
+                    continue  # Skip nested blocks, they'll be handled by parents
+                    
+                statement = self.context_parser.parse_block(block_info, all_tokens)
+                if statement:
+                    program.statements.append(statement)
+                    
+            except Exception as e:
+                error_msg = f"Line {block_info['start_token'].line}: Error parsing {block_info.get('subtype', 'block')}: {str(e)}"
+                self.errors.append(error_msg)
+                
+                # Attempt recovery
+                recovery_plan = self.error_recovery.create_recovery_plan(
+                    e, block_info, all_tokens, 0
+                )
+                if recovery_plan['can_recover']:
+                    program.statements.append(recovery_plan['recovered_statement'])
+        
+        return program
 
-        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+    def _parse_traditional(self):
+        """Traditional recursive descent parsing (fallback)"""
+        program = Program()
+        while not self.cur_token_is(EOF):
             stmt = self.parse_statement()
             if stmt is not None:
-                block.statements.append(stmt)
+                program.statements.append(stmt)
             self.next_token()
+        return program
 
-        return block
-
-    def parse_single_statement_block(self):
-        """Parse single statement block (for : syntax or implicit)"""
-        block = BlockStatement()
-        self.next_token()
-        stmt = self.parse_statement()
-        if stmt:
-            block.statements.append(stmt)
-        return block
-
-    def parse_external_declaration(self):
-        """Parse external function declarations"""
-        token = self.cur_token
-
-        if not self.expect_peek(ACTION):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected 'action' after 'external'")
-            return None
-
-        if not self.expect_peek(IDENT):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected function name after 'external action'")
-            return None
-
-        name = Identifier(self.cur_token.literal)
-
-        # Parse parameters
-        parameters = []
-        if self.peek_token_is(LPAREN):
-            self.next_token()  # consume identifier
-            if not self.expect_peek(LPAREN):
-                return None
-            parameters = self.parse_action_parameters()
-            if parameters is None:
-                return None
-
-        # Expect FROM keyword
-        if not self.expect_peek(FROM):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'from' after external function declaration")
-            return None
-
-        # Expect module string
-        if not self.expect_peek(STRING):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected module path string")
-            return None
-
-        module_path = self.cur_token.literal
-
-        return ExternalDeclaration(
-            name=name,
-            parameters=parameters,
-            module_path=module_path
-        )
-
+    # === TRADITIONAL PARSER METHODS (for compatibility) ===
+    
     def parse_statement(self):
+        """Parse statement with error recovery"""
         try:
             if self.cur_token_is(LET):
                 return self.parse_let_statement()
@@ -281,12 +206,176 @@ class Parser:
             else:
                 return self.parse_expression_statement()
         except Exception as e:
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}")
+            error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}"
+            self.errors.append(error_msg)
+            
+            # Use error recovery if available
+            if self.use_advanced_parsing:
+                recovery_plan = self.error_recovery.create_recovery_plan(
+                    e, None, [self.cur_token], 0
+                )
+                if recovery_plan['can_recover']:
+                    return recovery_plan['recovered_statement']
+            
             self.recover_to_next_statement()
             return None
 
+    def parse_try_catch_statement(self):
+        """Enhanced try-catch parsing with structural awareness"""
+        if self.use_advanced_parsing:
+            # Let structural analyzer handle this if possible
+            pass
+            
+        # Traditional implementation
+        try_token = self.cur_token
+        try_block = self.parse_block("try")
+        if not try_block:
+            return None
+
+        if self.cur_token_is(CATCH):
+            pass
+        elif not self.expect_peek(CATCH):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
+            return None
+
+        error_var = None
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            self.next_token()
+            if not self.cur_token_is(IDENT):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected error variable name after 'catch('")
+                return None
+            error_var = Identifier(self.cur_token.literal)
+            if not self.expect_peek(RPAREN):
+                return None
+        elif self.peek_token_is(IDENT):
+            self.next_token()
+            error_var = Identifier(self.cur_token.literal)
+        else:
+            error_var = Identifier("error")
+
+        catch_block = self.parse_block("catch")
+        if not catch_block:
+            return None
+
+        return TryCatchStatement(
+            try_block=try_block,
+            error_variable=error_var,
+            catch_block=catch_block
+        )
+
+    def parse_block(self, block_type=""):
+        """Unified block parser"""
+        if self.syntax_style == "universal":
+            if not self.expect_peek(LBRACE):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Universal syntax requires {{ }} for {block_type} blocks")
+                return None
+            return self.parse_brace_block()
+
+        if self.peek_token_is(LBRACE):
+            if not self.expect_peek(LBRACE):
+                return None
+            return self.parse_brace_block()
+        elif self.peek_token_is(COLON):
+            if not self.expect_peek(COLON):
+                return None
+            return self.parse_single_statement_block()
+        else:
+            return self.parse_single_statement_block()
+
+    def parse_brace_block(self):
+        block = BlockStatement()
+        self.next_token()
+
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            stmt = self.parse_statement()
+            if stmt is not None:
+                block.statements.append(stmt)
+            self.next_token()
+
+        return block
+
+    def parse_single_statement_block(self):
+        block = BlockStatement()
+        self.next_token()
+        stmt = self.parse_statement()
+        if stmt:
+            block.statements.append(stmt)
+        return block
+
+    # === REST OF TRADITIONAL PARSER METHODS ===
+    
+    def parse_debug_statement(self):
+        token = self.cur_token
+        self.next_token()
+
+        if self.syntax_style == "universal":
+            if not self.cur_token_is(LPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Universal syntax requires debug(expression)")
+                return None
+            self.next_token()
+            value = self.parse_expression(LOWEST)
+            if not value:
+                self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
+                return None
+            if not self.expect_peek(RPAREN):
+                return None
+        else:
+            if self.cur_token_is(LPAREN):
+                self.next_token()
+                value = self.parse_expression(LOWEST)
+                if not value:
+                    self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
+                    return None
+                if not self.expect_peek(RPAREN):
+                    return None
+            else:
+                value = self.parse_expression(LOWEST)
+                if not value:
+                    self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
+                    return None
+
+        return DebugStatement(value=value)
+
+    def parse_external_declaration(self):
+        token = self.cur_token
+
+        if not self.expect_peek(ACTION):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected 'action' after 'external'")
+            return None
+
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected function name after 'external action'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+
+        parameters = []
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            if not self.expect_peek(LPAREN):
+                return None
+            parameters = self.parse_action_parameters()
+            if parameters is None:
+                return None
+
+        if not self.expect_peek(FROM):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'from' after external function declaration")
+            return None
+
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected module path string")
+            return None
+
+        module_path = self.cur_token.literal
+
+        return ExternalDeclaration(
+            name=name,
+            parameters=parameters,
+            module_path=module_path
+        )
+
     def recover_to_next_statement(self):
-        """Skip tokens until we find a statement boundary"""
         while not self.cur_token_is(EOF):
             if self.cur_token_is(SEMICOLON):
                 return
@@ -296,39 +385,33 @@ class Parser:
             self.next_token()
 
     def parse_lambda_expression(self):
-        """Parse lambda expressions"""
         token = self.cur_token
         parameters = []
 
-        self.next_token()  # consume 'lambda'
+        self.next_token()
 
-        # Handle parameters
         if self.cur_token_is(LPAREN):
-            self.next_token()  # consume '('
+            self.next_token()
             parameters = self._parse_parameter_list()
             if not self.expect_peek(RPAREN):
                 return None
         elif self.cur_token_is(IDENT):
             parameters = self._parse_parameter_list()
 
-        # Expect arrow or colon
         if self.cur_token_is(COLON):
-            self.next_token()  # consume ':'
+            self.next_token()
         elif self.cur_token_is(MINUS) and self.peek_token_is(GT):
-            self.next_token()  # consume '-'
-            self.next_token()  # consume '>'
+            self.next_token()
+            self.next_token()
         else:
-            # Try to expect colon, but don't fail if we're already at the body
             if not (isinstance(self.cur_token, Token) and self.cur_token.type in [IDENT, INT, STRING, TRUE, FALSE, LPAREN, LBRACKET, LBRACE]):
                 if not self.expect_peek(COLON):
-                    # Last resort: assume we're at the body already
                     pass
 
         body = self.parse_expression(LOWEST)
         return LambdaExpression(parameters=parameters, body=body)
 
     def _parse_parameter_list(self):
-        """Helper to parse parameter lists"""
         parameters = []
 
         if not self.cur_token_is(IDENT):
@@ -337,8 +420,8 @@ class Parser:
         parameters.append(Identifier(self.cur_token.literal))
 
         while self.peek_token_is(COMMA):
-            self.next_token()  # consume identifier
-            self.next_token()  # consume ','
+            self.next_token()
+            self.next_token()
             if self.cur_token_is(IDENT):
                 parameters.append(Identifier(self.cur_token.literal))
             else:
@@ -348,18 +431,16 @@ class Parser:
         return parameters
 
     def parse_assignment_expression(self, left):
-        """Parse assignment expressions"""
         if not isinstance(left, Identifier):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
             return None
 
         expression = AssignmentExpression(name=left, value=None)
-        self.next_token()  # Move past the =
+        self.next_token()
         expression.value = self.parse_expression(LOWEST)
         return expression
 
     def parse_method_call_expression(self, left):
-        """Parse object.method(arguments)"""
         if not self.cur_token_is(DOT):
             return None
 
@@ -376,17 +457,7 @@ class Parser:
         else:
             return PropertyAccessExpression(object=left, property=method)
 
-    def parse_program(self):
-        program = Program()
-        while not self.cur_token_is(EOF):
-            stmt = self.parse_statement()
-            if stmt is not None:
-                program.statements.append(stmt)
-            self.next_token()
-        return program
-
     def parse_export_statement(self):
-        """Parse export statements"""
         token = self.cur_token
 
         if not self.expect_peek(IDENT):
@@ -395,11 +466,10 @@ class Parser:
 
         name = Identifier(self.cur_token.literal)
 
-        # Parse optional 'to' clause
         allowed_files = []
         if self.peek_token_is(IDENT) and self.peek_token.literal == "to":
-            self.next_token()  # consume identifier
-            self.next_token()  # consume 'to'
+            self.next_token()
+            self.next_token()
 
             if not self.peek_token_is(STRING):
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected file path after 'to'")
@@ -413,11 +483,10 @@ class Parser:
                 else:
                     break
 
-        # Parse optional 'with' clause
         permission = "read_only"
         if self.peek_token_is(IDENT) and self.peek_token.literal == "with":
-            self.next_token()  # consume identifier
-            self.next_token()  # consume 'with'
+            self.next_token()
+            self.next_token()
 
             if self.cur_token_is(STRING):
                 permission = self.cur_token.literal
@@ -428,10 +497,7 @@ class Parser:
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
     def parse_if_statement(self):
-        """FIXED: Clean if statement parsing"""
-        # Parse condition
         if self.peek_token_is(LPAREN):
-            # if (condition) syntax
             if not self.expect_peek(LPAREN):
                 return None
             self.next_token()
@@ -441,18 +507,15 @@ class Parser:
             if not self.expect_peek(RPAREN):
                 return None
         else:
-            # if condition syntax (without parentheses)
             self.next_token()
             condition = self.parse_expression(LOWEST)
             if not condition:
                 return None
 
-        # Parse consequence
         consequence = self.parse_block("if")
         if not consequence:
             return None
 
-        # Parse alternative
         alternative = None
         if self.peek_token_is(ELSE):
             self.next_token()
@@ -467,11 +530,10 @@ class Parser:
         return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
 
     def parse_embedded_literal(self):
-        """Parse embedded code blocks"""
         if not self.expect_peek(LBRACE):
             return None
 
-        self.next_token()  # Move to token after {
+        self.next_token()
         code_content = self.read_embedded_code_content()
         if code_content is None:
             return None
@@ -480,14 +542,13 @@ class Parser:
         if not lines:
             self.errors.append("Empty embedded code block")
             return None
-            
+
         language_line = lines[0].strip()
         language = language_line if language_line else "unknown"
         code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
         return EmbeddedLiteral(language=language, code=code)
 
     def read_embedded_code_content(self):
-        """Read content between { and } including nested braces"""
         start_position = self.lexer.position
         brace_count = 1
 
@@ -507,7 +568,6 @@ class Parser:
         return content
 
     def parse_exactly_statement(self):
-        """Parse exactly blocks"""
         if not self.expect_peek(IDENT):
             return None
 
@@ -520,7 +580,6 @@ class Parser:
         return ExactlyStatement(name=name, body=body)
 
     def parse_for_each_statement(self):
-        """Parse for-each loops"""
         stmt = ForEachStatement(item=None, iterable=None, body=None)
 
         if not self.expect_peek(EACH):
@@ -540,7 +599,6 @@ class Parser:
         self.next_token()
         stmt.iterable = self.parse_expression(LOWEST)
 
-        # Parse body
         body = self.parse_block("for-each")
         if not body:
             return None
@@ -549,7 +607,6 @@ class Parser:
         return stmt
 
     def parse_action_statement(self):
-        """Parse function definitions"""
         if not self.expect_peek(IDENT):
             self.errors.append("Expected function name after 'action'")
             return None
@@ -564,7 +621,6 @@ class Parser:
         if parameters is None:
             return None
 
-        # Parse body
         body = self.parse_block("action")
         if not body:
             return None
@@ -572,7 +628,6 @@ class Parser:
         return ActionStatement(name=name, parameters=parameters, body=body)
 
     def parse_action_parameters(self):
-        """Parse function parameters"""
         params = []
         if self.peek_token_is(RPAREN):
             self.next_token()
@@ -600,7 +655,6 @@ class Parser:
         return params
 
     def parse_action_literal(self):
-        """Parse action literals"""
         if not self.expect_peek(LPAREN):
             return None
 
@@ -620,7 +674,6 @@ class Parser:
         return ActionLiteral(parameters=parameters, body=body)
 
     def parse_while_statement(self):
-        """Parse while loops"""
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after 'while'")
             return None
@@ -639,7 +692,6 @@ class Parser:
         return WhileStatement(condition=condition, body=body)
 
     def parse_use_statement(self):
-        """Parse import statements"""
         if not self.expect_peek(STRING):
             self.errors.append("Expected file path after 'use'")
             return None
@@ -648,8 +700,8 @@ class Parser:
 
         alias = None
         if self.peek_token_is(IDENT) and self.peek_token.literal == "as":
-            self.next_token()  # consume string
-            self.next_token()  # consume 'as'
+            self.next_token()
+            self.next_token()
             if not self.expect_peek(IDENT):
                 self.errors.append("Expected alias name after 'as'")
                 return None
@@ -658,7 +710,6 @@ class Parser:
         return UseStatement(file_path=file_path, alias=alias)
 
     def parse_screen_statement(self):
-        """Parse screen definitions"""
         stmt = ScreenStatement(name=None, body=None)
         if not self.expect_peek(IDENT):
             self.errors.append("Expected screen name after 'screen'")
@@ -674,14 +725,12 @@ class Parser:
         return stmt
 
     def parse_return_statement(self):
-        """Parse return statements"""
         stmt = ReturnStatement(return_value=None)
         self.next_token()
         stmt.return_value = self.parse_expression(LOWEST)
         return stmt
 
     def parse_let_statement(self):
-        """Parse variable declarations"""
         stmt = LetStatement(name=None, value=None)
 
         if not self.expect_peek(IDENT):
@@ -703,7 +752,6 @@ class Parser:
         return stmt
 
     def parse_print_statement(self):
-        """Parse print statements"""
         stmt = PrintStatement(value=None)
         self.next_token()
         stmt.value = self.parse_expression(LOWEST)
@@ -714,14 +762,12 @@ class Parser:
         return stmt
 
     def parse_expression_statement(self):
-        """Parse expression statements"""
         stmt = ExpressionStatement(expression=self.parse_expression(LOWEST))
         if self.peek_token_is(SEMICOLON):
             self.next_token()
         return stmt
 
     def parse_expression(self, precedence):
-        """Parse expressions with precedence handling"""
         if self.cur_token.type not in self.prefix_parse_fns:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Unexpected token '{self.cur_token.literal}'")
             return None
@@ -852,7 +898,6 @@ class Parser:
         return expression
 
     def parse_block_statement(self):
-        """Legacy method - use parse_block instead"""
         return self.parse_brace_block()
 
     def parse_expression_list(self, end):
@@ -897,3 +942,6 @@ class Parser:
 
     def cur_precedence(self):
         return precedences.get(self.cur_token.type, LOWEST)
+
+# Backward compatibility
+Parser = UltimateParser
