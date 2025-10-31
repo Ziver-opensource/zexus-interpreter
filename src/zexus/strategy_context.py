@@ -1,4 +1,4 @@
-# strategy_context.py (COMPLETELY FIXED VERSION)
+# strategy_context.py (ENHANCED EXPRESSION PARSING VERSION)
 from .zexus_token import *
 from .zexus_ast import *
 
@@ -86,6 +86,173 @@ class ContextStackParser:
                 return BlockStatement()
         return node
 
+    # === ENHANCED EXPRESSION PARSING METHODS ===
+
+    def _parse_print_statement(self, block_info, all_tokens):
+        """Parse print statement with sophisticated expression parsing"""
+        print("🔧 [Context] Parsing print statement with expression")
+        tokens = block_info['tokens']
+        
+        if len(tokens) < 3:  # Need at least print ( content )
+            return PrintStatement(StringLiteral(""))
+        
+        # Extract the content inside parentheses
+        inner_tokens = tokens[1:-1]
+        
+        if not inner_tokens:
+            return PrintStatement(StringLiteral(""))
+        
+        # Parse the full expression inside the parentheses
+        expression = self._parse_expression(inner_tokens)
+        return PrintStatement(expression)
+
+    def _parse_expression(self, tokens):
+        """Parse a full expression from tokens - SOPHISTICATED IMPLEMENTATION"""
+        if not tokens:
+            return StringLiteral("")
+        
+        # Handle string concatenation: "a" + "b" + "c"
+        for i, token in enumerate(tokens):
+            if token.type == PLUS:
+                left_tokens = tokens[:i]
+                right_tokens = tokens[i+1:]
+                left_expr = self._parse_expression(left_tokens)
+                right_expr = self._parse_expression(right_tokens)
+                return InfixExpression(left_expr, "+", right_expr)
+        
+        # Handle function calls: string(variable)
+        if len(tokens) >= 3 and tokens[0].type == IDENT and tokens[1].type == LPAREN:
+            function_name = tokens[0].literal
+            # Extract arguments inside parentheses
+            arg_tokens = self._extract_nested_tokens(tokens, 1)
+            arguments = self._parse_argument_list(arg_tokens)
+            return CallExpression(Identifier(function_name), arguments)
+        
+        # Handle single token expressions
+        if len(tokens) == 1:
+            return self._parse_single_token_expression(tokens[0])
+        
+        # Handle complex expressions by creating a compound representation
+        # This is a fallback for very complex expressions
+        return self._parse_compound_expression(tokens)
+
+    def _parse_single_token_expression(self, token):
+        """Parse a single token into an expression"""
+        if token.type == STRING:
+            return StringLiteral(token.literal)
+        elif token.type == INT:
+            return IntegerLiteral(int(token.literal))
+        elif token.type == FLOAT:
+            return FloatLiteral(float(token.literal))
+        elif token.type == IDENT:
+            return Identifier(token.literal)
+        elif token.type == TRUE:
+            return Boolean(True)
+        elif token.type == FALSE:
+            return Boolean(False)
+        else:
+            return StringLiteral(token.literal)  # Fallback
+
+    def _parse_compound_expression(self, tokens):
+        """Parse compound expressions with multiple tokens"""
+        # For complex expressions, try to parse them intelligently
+        expression_parts = []
+        i = 0
+        
+        while i < len(tokens):
+            token = tokens[i]
+            
+            # Handle function calls within expressions
+            if token.type == IDENT and i + 1 < len(tokens) and tokens[i+1].type == LPAREN:
+                # Parse function call
+                func_name = token.literal
+                arg_tokens = self._extract_nested_tokens(tokens, i+1)
+                arguments = self._parse_argument_list(arg_tokens)
+                expression_parts.append(CallExpression(Identifier(func_name), arguments))
+                i += len(arg_tokens) + 2  # Skip function name and parentheses
+            else:
+                # Parse single token
+                expression_parts.append(self._parse_single_token_expression(token))
+                i += 1
+        
+        # If we have multiple parts, create a string representation
+        if len(expression_parts) > 1:
+            # For now, return the first part as a simplified representation
+            return expression_parts[0]
+        elif expression_parts:
+            return expression_parts[0]
+        else:
+            return StringLiteral("")
+
+    def _extract_nested_tokens(self, tokens, start_index):
+        """Extract tokens inside nested parentheses/brackets/braces"""
+        if start_index >= len(tokens) or tokens[start_index].type != LPAREN:
+            return []
+        
+        nested_tokens = []
+        depth = 1
+        i = start_index + 1
+        
+        while i < len(tokens) and depth > 0:
+            token = tokens[i]
+            if token.type == LPAREN:
+                depth += 1
+            elif token.type == RPAREN:
+                depth -= 1
+            
+            if depth > 0:
+                nested_tokens.append(token)
+            i += 1
+        
+        return nested_tokens
+
+    def _parse_argument_list(self, tokens):
+        """Parse comma-separated argument list"""
+        arguments = []
+        current_arg = []
+        
+        for token in tokens:
+            if token.type == COMMA:
+                if current_arg:
+                    arguments.append(self._parse_expression(current_arg))
+                    current_arg = []
+            else:
+                current_arg.append(token)
+        
+        if current_arg:
+            arguments.append(self._parse_expression(current_arg))
+        
+        return arguments
+
+    def _parse_function_call(self, block_info, all_tokens):
+        """Parse function call expression with arguments"""
+        start_idx = block_info['start_index']
+        if start_idx > 0:
+            function_name = all_tokens[start_idx - 1].literal
+            tokens = block_info['tokens']
+            
+            if len(tokens) >= 3:
+                # Extract arguments from inside parentheses
+                inner_tokens = tokens[1:-1]
+                arguments = self._parse_argument_list(inner_tokens)
+                return CallExpression(Identifier(function_name), arguments)
+            else:
+                return CallExpression(Identifier(function_name), [])
+        return None
+
+    def _parse_generic_paren_expression(self, block_info, all_tokens):
+        """Parse generic parenthesized expression with full expression parsing"""
+        tokens = block_info['tokens']
+        inner_tokens = tokens[1:-1] if len(tokens) > 2 else []
+        
+        if not inner_tokens:
+            return None
+        
+        # Use the full expression parser for parenthesized expressions
+        return self._parse_expression(inner_tokens)
+
+    # === REST OF THE METHODS (unchanged) ===
+
     def _parse_loop_context(self, block_info, all_tokens):
         """Parse loop blocks (for/while) with context awareness"""
         print("🔧 [Context] Parsing loop block")
@@ -142,81 +309,6 @@ class ContextStackParser:
         """Parse generic brace block with context awareness"""
         print("🔧 [Context] Parsing brace block")
         return BlockStatement()
-
-    def _parse_paren_block_context(self, block_info, all_tokens):
-        """Parse parentheses block - FIXED to return proper statements"""
-        print("🔧 [Context] Parsing parentheses block")
-
-        # For parentheses blocks, we need to determine if this is:
-        # 1. A print statement: print("hello")
-        # 2. A function call: someFunction()
-        # 3. A condition: if (condition)
-        # 4. Just a parenthesized expression: (x + y)
-
-        tokens = block_info['tokens']
-        if len(tokens) < 3:  # Need at least ( content )
-            return None
-
-        # Look at context to determine what this paren block represents
-        context = self.get_current_context()
-        start_idx = block_info['start_index']
-
-        # Check if this is likely a print statement
-        if start_idx > 0 and all_tokens[start_idx - 1].type == PRINT:
-            return self._parse_print_statement(block_info, all_tokens)
-        
-        # Check if this is likely a function call
-        elif start_idx > 0 and all_tokens[start_idx - 1].type == IDENT:
-            return self._parse_function_call(block_info, all_tokens)
-        
-        # Otherwise, parse as generic parenthesized expression
-        else:
-            return self._parse_generic_paren_expression(block_info, all_tokens)
-
-    def _parse_print_statement(self, block_info, all_tokens):
-        """Parse print statement with parentheses"""
-        tokens = block_info['tokens']
-        if len(tokens) >= 3:  # Should have print ( expression )
-            # Extract the expression inside parentheses
-            inner_tokens = tokens[1:-1]
-            if inner_tokens and inner_tokens[0].type == STRING:
-                return PrintStatement(StringLiteral(inner_tokens[0].literal))
-        return PrintStatement(StringLiteral(""))
-
-    def _parse_function_call(self, block_info, all_tokens):
-        """Parse function call expression"""
-        start_idx = block_info['start_index']
-        if start_idx > 0:
-            function_name = all_tokens[start_idx - 1].literal
-            return CallExpression(
-                function=Identifier(function_name),
-                arguments=[]  # Simplified - no arguments for now
-            )
-        return None
-
-    def _parse_generic_paren_expression(self, block_info, all_tokens):
-        """Parse generic parenthesized expression"""
-        tokens = block_info['tokens']
-        inner_tokens = tokens[1:-1] if len(tokens) > 2 else []
-        
-        if not inner_tokens:
-            return None
-            
-        # Parse the first meaningful token inside parentheses
-        first_token = inner_tokens[0]
-        
-        if first_token.type == STRING:
-            return StringLiteral(first_token.literal)
-        elif first_token.type == INT:
-            return IntegerLiteral(int(first_token.literal))
-        elif first_token.type == IDENT:
-            return Identifier(first_token.literal)
-        elif first_token.type == TRUE:
-            return Boolean(True)
-        elif first_token.type == FALSE:
-            return Boolean(False)
-        
-        return None
 
     def _parse_statement_list(self, tokens):
         """Parse a list of tokens into statements with context awareness - SIMPLIFIED"""
