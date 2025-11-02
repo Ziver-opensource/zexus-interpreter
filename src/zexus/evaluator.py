@@ -1,6 +1,8 @@
-# evaluator.py (DEBUG VERSION)
+# evaluator.py (FIXED VERSION)
 import sys
 import traceback
+import json
+import os
 from . import zexus_ast
 from .zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
@@ -50,7 +52,7 @@ def debug_log(message, data=None):
         else:
             print(f"🔍 [EVAL DEBUG] {message}")
 
-# === ENHANCED HELPER FUNCTIONS ===
+# === FIXED HELPER FUNCTIONS ===
 
 def eval_program(statements, env):
     debug_log("eval_program", f"Processing {len(statements)} statements")
@@ -136,7 +138,7 @@ def eval_prefix_expression(operator, right):
         result = eval_minus_prefix_operator_expression(right)
     else:
         result = EvaluationError(f"Unknown operator: {operator}{right.type()}")
-    
+
     debug_log("  Prefix result", result)
     return result
 
@@ -267,7 +269,7 @@ def eval_if_expression(ie, env):
 
 def apply_function(fn, args, call_site=None):
     debug_log("apply_function", f"Calling {fn} with {len(args)} arguments: {args}")
-    
+
     if isinstance(fn, (Action, LambdaFunction)):
         debug_log("  Calling user-defined function")
         extended_env = extend_function_env(fn, args)
@@ -377,7 +379,57 @@ def check_import_permission(exported_value, importer_file, env):
         return EvaluationError(f"File '{importer_file}' not authorized to import this function")
     return True
 
-# === NEW BUILTIN FUNCTIONS FOR PHASE 1 ===
+# === FIXED: JSON CONVERSION FUNCTIONS ===
+def _zexus_to_python(value):
+    """Convert Zexus objects to Python native types for JSON serialization"""
+    if isinstance(value, Map):
+        python_dict = {}
+        for key, val in value.pairs.items():
+            python_key = key.inspect() if hasattr(key, 'inspect') else str(key)
+            python_dict[python_key] = _zexus_to_python(val)
+        return python_dict
+    elif isinstance(value, List):
+        return [_zexus_to_python(item) for item in value.elements]
+    elif isinstance(value, String):
+        return value.value
+    elif isinstance(value, Integer):
+        return value.value
+    elif isinstance(value, Float):
+        return value.value
+    elif isinstance(value, BooleanObj):
+        return value.value
+    elif value == NULL:
+        return None
+    elif isinstance(value, Builtin):
+        return f"<builtin: {value.name}>"
+    elif isinstance(value, DateTime):
+        return value.timestamp
+    else:
+        return str(value)
+
+def _python_to_zexus(value):
+    """Convert Python native types to Zexus objects"""
+    if isinstance(value, dict):
+        pairs = {}
+        for k, v in value.items():
+            pairs[k] = _python_to_zexus(v)
+        return Map(pairs)
+    elif isinstance(value, list):
+        return List([_python_to_zexus(item) for item in value])
+    elif isinstance(value, str):
+        return String(value)
+    elif isinstance(value, int):
+        return Integer(value)
+    elif isinstance(value, float):
+        return Float(value)
+    elif isinstance(value, bool):
+        return BooleanObj(value)
+    elif value is None:
+        return NULL
+    else:
+        return String(str(value))
+
+# === FIXED BUILTIN FUNCTIONS FOR PHASE 1 ===
 
 def builtin_datetime_now(*args):
     debug_log("builtin_datetime_now", "called")
@@ -419,7 +471,7 @@ def builtin_sqrt(*args):
         return EvaluationError("sqrt() takes exactly 1 argument")
     return Math.sqrt(args[0])
 
-# File I/O builtins
+# File I/O builtins - FIXED VERSIONS
 def builtin_file_read_text(*args):
     debug_log("builtin_file_read_text", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
@@ -444,11 +496,27 @@ def builtin_file_read_json(*args):
         return EvaluationError("file_read_json() takes exactly 1 string argument")
     return File.read_json(args[0])
 
+# FIXED: JSON write function
 def builtin_file_write_json(*args):
     debug_log("builtin_file_write_json", f"called with {args}")
     if len(args) != 2 or not isinstance(args[0], String):
         return EvaluationError("file_write_json() takes path string and data")
-    return File.write_json(args[0], args[1])
+    
+    # FIX: Properly convert Zexus objects to Python for JSON serialization
+    path = args[0].value if isinstance(args[0], String) else str(args[0])
+    data = args[1]
+    
+    try:
+        # Convert Zexus data to Python native types for JSON
+        python_data = _zexus_to_python(data)
+        json_str = json.dumps(python_data, indent=2)
+        
+        # Write to file
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(json_str)
+        return BooleanObj(True)
+    except Exception as e:
+        return EvaluationError(f"JSON write error: {str(e)}")
 
 def builtin_file_append(*args):
     debug_log("builtin_file_append", f"called with {args}")
@@ -477,7 +545,38 @@ def builtin_debug_trace(*args):
         return EvaluationError("debug_trace() takes exactly 1 string argument")
     return Debug.trace(args[0])
 
-# Existing builtin functions
+# FIXED: String function to handle all Zexus types
+def builtin_string(*args):
+    debug_log("builtin_string", f"called with {args}")
+    if len(args) != 1:
+        return EvaluationError(f"string() takes exactly 1 argument ({len(args)} given)")
+    arg = args[0]
+    
+    if isinstance(arg, Integer):
+        result = String(str(arg.value))
+    elif isinstance(arg, Float):
+        result = String(str(arg.value))
+    elif isinstance(arg, String):
+        result = arg
+    elif isinstance(arg, BooleanObj):
+        result = String("true" if arg.value else "false")
+    elif isinstance(arg, (List, Map)):
+        result = String(arg.inspect())
+    elif isinstance(arg, Builtin):
+        result = String(f"<built-in function: {arg.name}>")
+    elif isinstance(arg, DateTime):
+        result = String(f"<DateTime: {arg.timestamp}>")
+    elif isinstance(arg, (EvaluationError, ObjectEvaluationError)):
+        result = String(str(arg))
+    elif arg == NULL:
+        result = String("null")
+    else:
+        result = String("unknown")
+
+    debug_log("  builtin_string result", result)
+    return result
+
+# Other existing builtin functions
 def builtin_len(*args):
     debug_log("builtin_len", f"called with {args}")
     if len(args) != 1:
@@ -497,29 +596,6 @@ def builtin_first(*args):
         return EvaluationError("first() expects a list")
     list_obj = args[0]
     return list_obj.elements[0] if list_obj.elements else NULL
-
-def builtin_string(*args):
-    debug_log("builtin_string", f"called with {args}")
-    if len(args) != 1:
-        return EvaluationError(f"string() takes exactly 1 argument ({len(args)} given)")
-    arg = args[0]
-    if isinstance(arg, Integer):
-        result = String(str(arg.value))
-    elif isinstance(arg, Float):
-        result = String(str(arg.value))
-    elif isinstance(arg, String):
-        result = arg
-    elif isinstance(arg, BooleanObj):
-        result = String("true" if arg.value else "false")
-    elif isinstance(arg, (List, Map)):
-        result = String(arg.inspect())
-    elif isinstance(arg, Builtin):
-        result = String(f"<built-in function: {arg.name}>")
-    else:
-        result = String("unknown")
-    
-    debug_log("  builtin_string result", result)
-    return result
 
 def builtin_rest(*args):
     debug_log("builtin_rest", f"called with {args}")
@@ -852,14 +928,14 @@ def eval_node(node, env, stack_trace=None):
             debug_log("🚀 CallExpression node", f"Calling {node.function}")
             function = eval_node(node.function, env, stack_trace)
             debug_log("  Function resolved", f"{function} (type: {type(function).__name__})")
-            
+
             if isinstance(function, (EvaluationError, ObjectEvaluationError)):
                 debug_log("  Function evaluation error", function)
                 return function
-            
+
             args = eval_expressions(node.arguments, env)
             debug_log("  Arguments evaluated", f"{args} (count: {len(args)})")
-            
+
             if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
                 debug_log("  Arguments evaluation error", args)
                 return args
