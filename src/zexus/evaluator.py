@@ -1,4 +1,4 @@
-# evaluator.py (PRODUCTION READY WITH PHASE 1 UPDATE)
+# evaluator.py (FIXED VERSION)
 import sys
 import traceback
 from . import zexus_ast
@@ -33,10 +33,10 @@ class EvaluationError(Exception):
             location = f"Line {self.line}:{self.column}"
         else:
             location = "Unknown location"
-        
+
         trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
         trace_section = f"\n   Stack:\n{trace}" if trace else ""
-        
+
         return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
 
 # === ENHANCED HELPER FUNCTIONS ===
@@ -150,6 +150,17 @@ def eval_infix_expression(operator, left, right):
         return eval_float_infix_expression(operator, left, right)
     elif isinstance(left, String) and isinstance(right, String):
         return eval_string_infix_expression(operator, left, right)
+    
+    # NEW: Handle string concatenation with different types
+    elif operator == "+":
+        if isinstance(left, String):
+            # Convert right to string and concatenate
+            right_str = right.inspect() if not isinstance(right, String) else right.value
+            return String(left.value + str(right_str))
+        elif isinstance(right, String):
+            # Convert left to string and concatenate
+            left_str = left.inspect() if not isinstance(left, String) else left.value
+            return String(str(left_str) + right.value)
 
     return EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
 
@@ -429,10 +440,10 @@ def builtin_try_catch(*args):
     """Try-catch exception handling"""
     if len(args) < 2:
         return EvaluationError("try_catch() requires try-block and catch-block")
-    
+
     try_block = args[0]
     catch_block = args[1]
-    
+
     try:
         return eval_node(try_block, env)
     except Exception as e:
@@ -497,7 +508,6 @@ def builtin_reduce(*args):
     """Built-in reduce function for arrays"""
     if len(args) < 2 or len(args) > 3:
         return EvaluationError("reduce() takes 2 or 3 arguments (array, lambda[, initial])")
-
     array_obj, lambda_fn = args[0], args[1]
     initial = args[2] if len(args) == 3 else None
 
@@ -507,7 +517,6 @@ def builtin_map(*args):
     """Built-in map function for arrays"""
     if len(args) != 2:
         return EvaluationError("map() takes 2 arguments (array, lambda)")
-
     return array_map(args[0], args[1])
 
 def builtin_filter(*args):
@@ -528,7 +537,7 @@ builtins = {
     "reduce": Builtin(builtin_reduce, "reduce"),
     "map": Builtin(builtin_map, "map"),
     "filter": Builtin(builtin_filter, "filter"),
-    
+
     # NEW: Phase 1 builtins
     "datetime_now": Builtin(builtin_datetime_now, "datetime_now"),
     "timestamp": Builtin(builtin_timestamp, "timestamp"),
@@ -536,7 +545,7 @@ builtins = {
     "to_hex": Builtin(builtin_to_hex, "to_hex"),
     "from_hex": Builtin(builtin_from_hex, "from_hex"),
     "sqrt": Builtin(builtin_sqrt, "sqrt"),
-    
+
     # File I/O builtins
     "file_read_text": Builtin(builtin_file_read_text, "file_read_text"),
     "file_write_text": Builtin(builtin_file_write_text, "file_write_text"),
@@ -545,7 +554,7 @@ builtins = {
     "file_write_json": Builtin(builtin_file_write_json, "file_write_json"),
     "file_append": Builtin(builtin_file_append, "file_append"),
     "file_list_dir": Builtin(builtin_file_list_dir, "file_list_dir"),
-    
+
     # Debug builtins
     "debug_log": Builtin(builtin_debug_log, "debug_log"),
     "debug_trace": Builtin(builtin_debug_trace, "debug_trace"),
@@ -559,7 +568,7 @@ def eval_node(node, env, stack_trace=None):
 
     node_type = type(node)
     stack_trace = stack_trace or []
-    
+
     # Add to stack trace for better error reporting
     current_frame = f"  at {node_type.__name__}"
     if hasattr(node, 'token') and node.token:
@@ -808,13 +817,13 @@ def evaluate(program, env, debug_mode=False):
     if debug_mode:
         env.enable_debug()
         print("🔧 Debug mode enabled")
-    
+
     result = eval_node(program, env)
-    
+
     if debug_mode:
         env.disable_debug()
 
     if isinstance(result, EvaluationError):
         return str(result)
-    
+
     return result
