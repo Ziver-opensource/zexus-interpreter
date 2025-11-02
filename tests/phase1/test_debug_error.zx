@@ -10,7 +10,7 @@ debug_log("Test variable", test_var)
 try {
     let result = 10 / 0
     print("This won't print: " + string(result))
-} catch (error) {
+} catch((error)) {
     print("✅ Caught division error: " + string(error))
 }
 
@@ -18,7 +18,7 @@ try {
 try {
     let result = 10 / 2
     print("✅ Successful operation: " + string(result))
-} catch (error) {
+} catch((error)) {
     print("This won't print: " + string(error))
 }
 
@@ -29,7 +29,7 @@ action risky_operation() {
             throw "File not found"
         }
         return "Success"
-    } catch (error) {
+    } catch((error)) {
         return "Caught: " + string(error)
     }
 }

@@ -1,0 +1,7 @@
+# Test basic function calls
+let result = string(42)
+print("Result: " + result)
+
+# Test without concatenation  
+let simple_result = string(42)
+print(simple_result)

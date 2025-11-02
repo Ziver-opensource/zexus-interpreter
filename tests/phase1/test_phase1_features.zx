@@ -78,7 +78,7 @@ try {
     # This will cause an error
     let result = 10 / 0
     print("This should not print: " + string(result))
-} catch (error) {
+} catch((error)) {
     print("  ✅ Caught error: " + string(error))
     print("  Error handled gracefully!")
 }
@@ -87,7 +87,7 @@ try {
 try {
     let safe_result = 10 / 2
     print("  ✅ Safe operation result: " + string(safe_result))
-} catch (error) {
+} catch((error)) {
     print("  This should not print: " + string(error))
 }
 
@@ -139,7 +139,7 @@ action safe_file_operation(path) {
         let content = file_read_text(path)
         debug_log("File read successfully", content)
         return content
-    } catch (error) {
+    } catch((error)) {
         debug_log("File operation failed", error)
         return "Error: " + string(error)
     }

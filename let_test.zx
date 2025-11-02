@@ -1,0 +1,3 @@
+print("Testing let statement:")
+let x = 42
+print(x)
