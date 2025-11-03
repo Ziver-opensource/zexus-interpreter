@@ -1,86 +1,95 @@
-# zexus_ast.py (ENHANCED WITH PHASE 1 NODES)
+"""
+Clean AST Definitions for Compiler Phase
+"""
 
 # Base classes
 class Node: 
+    def token_literal(self):
+        return ""
+
     def __repr__(self):
         return f"{self.__class__.__name__}()"
 
-class Statement(Node): pass
-class Expression(Node): pass
+class Statement(Node): 
+    pass
+
+class Expression(Node): 
+    pass
 
 class Program(Node):
     def __init__(self):
         self.statements = []
 
+    def token_literal(self):
+        if len(self.statements) > 0:
+            return self.statements[0].token_literal()
+        return ""
+
     def __repr__(self):
-        return f"Program(statements={len(self.statements)})"
+        return f"Program({len(self.statements)} statements)"
 
 # Statement Nodes
 class LetStatement(Statement):
-    def __init__(self, name, value): 
-        self.name = name; self.value = value
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def token_literal(self):
+        return "let"
 
     def __repr__(self):
-        return f"LetStatement(name={self.name}, value={self.value})"
+        return f"LetStatement({self.name})"
 
 class ReturnStatement(Statement):
     def __init__(self, return_value):
         self.return_value = return_value
 
+    def token_literal(self):
+        return "return"
+
     def __repr__(self):
-        return f"ReturnStatement(return_value={self.return_value})"
+        return f"ReturnStatement({self.return_value})"
 
 class ExpressionStatement(Statement):
-    def __init__(self, expression): 
+    def __init__(self, expression):
         self.expression = expression
 
+    def token_literal(self):
+        return self.expression.token_literal()
+
     def __repr__(self):
-        return f"ExpressionStatement(expression={self.expression})"
+        return f"ExpressionStatement({self.expression})"
 
 class BlockStatement(Statement):
-    def __init__(self): 
+    def __init__(self):
         self.statements = []
 
+    def token_literal(self):
+        if len(self.statements) > 0:
+            return self.statements[0].token_literal()
+        return ""
+
     def __repr__(self):
-        return f"BlockStatement(statements={len(self.statements)})"
+        return f"BlockStatement({len(self.statements)} statements)"
 
 class PrintStatement(Statement):
-    def __init__(self, value): 
+    def __init__(self, value):
         self.value = value
 
-    def __repr__(self):
-        return f"PrintStatement(value={self.value})"
-
-class ForEachStatement(Statement):
-    def __init__(self, item, iterable, body):
-        self.item = item; self.iterable = iterable; self.body = body
+    def token_literal(self):
+        return "print"
 
     def __repr__(self):
-        return f"ForEachStatement(item={self.item}, iterable={self.iterable})"
-
-class EmbeddedCodeStatement(Statement):
-    def __init__(self, name, language, code):
-        self.name = name
-        self.language = language
-        self.code = code
-
-    def __repr__(self):
-        return f"EmbeddedCodeStatement(name={self.name}, language={self.language})"
-
-class UseStatement(Statement):
-    def __init__(self, embedded_ref, method, arguments):
-        self.embedded_ref = embedded_ref
-        self.method = method
-        self.arguments = arguments
-
-    def __repr__(self):
-        return f"UseStatement(embedded_ref={self.embedded_ref}, method={self.method})"
+        return f"PrintStatement({self.value})"
 
 class IfStatement(Statement):
     def __init__(self, condition, consequence, alternative=None):
         self.condition = condition
         self.consequence = consequence
         self.alternative = alternative
+
+    def token_literal(self):
+        return "if"
 
     def __repr__(self):
         return f"IfStatement(condition={self.condition})"
@@ -90,16 +99,23 @@ class WhileStatement(Statement):
         self.condition = condition
         self.body = body
 
+    def token_literal(self):
+        return "while"
+
     def __repr__(self):
         return f"WhileStatement(condition={self.condition})"
 
-class ScreenStatement(Statement):
-    def __init__(self, name, body):
-        self.name = name
+class ForEachStatement(Statement):
+    def __init__(self, item, iterable, body):
+        self.item = item
+        self.iterable = iterable
         self.body = body
 
+    def token_literal(self):
+        return "for"
+
     def __repr__(self):
-        return f"ScreenStatement(name={self.name})"
+        return f"ForEachStatement(item={self.item}, iterable={self.iterable})"
 
 class ActionStatement(Statement):
     def __init__(self, name, parameters, body):
@@ -107,129 +123,150 @@ class ActionStatement(Statement):
         self.parameters = parameters
         self.body = body
 
-    def __repr__(self):
-        return f"ActionStatement(name={self.name}, parameters={len(self.parameters)})"
-
-class ExactlyStatement(Statement):
-    def __init__(self, name, body):
-        self.name = name
-        self.body = body
+    def token_literal(self):
+        return "action"
 
     def __repr__(self):
-        return f"ExactlyStatement(name={self.name})"
+        return f"ActionStatement({self.name}, {len(self.parameters)} params)"
 
-# Export statement
+class UseStatement(Statement):
+    def __init__(self, file_path, alias=None):
+        self.file_path = file_path
+        self.alias = alias
+
+    def token_literal(self):
+        return "use"
+
+    def __repr__(self):
+        return f"UseStatement('{self.file_path}')"
+
 class ExportStatement(Statement):
     def __init__(self, name, allowed_files=None, permission=None):
         self.name = name
         self.allowed_files = allowed_files or []
         self.permission = permission or "read_only"
 
-    def __repr__(self):
-        return f"ExportStatement(name={self.name}, files={len(self.allowed_files)}, permission='{self.permission}')"
+    def token_literal(self):
+        return "export"
 
-# NEW: Debug statement
-class DebugStatement(Statement):
-    def __init__(self, value):
-        self.value = value
-    
     def __repr__(self):
-        return f"DebugStatement(value={self.value})"
-
-# NEW: Try-catch statement  
-class TryCatchStatement(Statement):
-    def __init__(self, try_block, error_variable, catch_block):
-        self.try_block = try_block
-        self.error_variable = error_variable
-        self.catch_block = catch_block
-    
-    def __repr__(self):
-        return f"TryCatchStatement(error_var={self.error_variable})"
-
-# NEW: External function declaration
-class ExternalDeclaration(Statement):
-    def __init__(self, name, parameters, module_path):
-        self.name = name
-        self.parameters = parameters
-        self.module_path = module_path
-    
-    def __repr__(self):
-        return f"ExternalDeclaration(name={self.name}, module={self.module_path})"
+        return f"ExportStatement({self.name})"
 
 # Expression Nodes
 class Identifier(Expression):
-    def __init__(self, value): 
+    def __init__(self, value):
         self.value = value
+
+    def token_literal(self):
+        return self.value
 
     def __repr__(self):
         return f"Identifier('{self.value}')"
 
 class IntegerLiteral(Expression):
-    def __init__(self, value): 
+    def __init__(self, value):
         self.value = value
+
+    def token_literal(self):
+        return str(self.value)
 
     def __repr__(self):
         return f"IntegerLiteral({self.value})"
 
 class FloatLiteral(Expression):
-    def __init__(self, value): 
+    def __init__(self, value):
         self.value = value
+
+    def token_literal(self):
+        return str(self.value)
 
     def __repr__(self):
         return f"FloatLiteral({self.value})"
 
 class StringLiteral(Expression):
-    def __init__(self, value): 
+    def __init__(self, value):
         self.value = value
+
+    def token_literal(self):
+        return self.value
 
     def __repr__(self):
         return f"StringLiteral('{self.value}')"
 
 class Boolean(Expression):
-    def __init__(self, value): 
+    def __init__(self, value):
         self.value = value
+
+    def token_literal(self):
+        return "true" if self.value else "false"
 
     def __repr__(self):
         return f"Boolean({self.value})"
 
 class ListLiteral(Expression):
-    def __init__(self, elements): 
+    def __init__(self, elements):
         self.elements = elements
 
+    def token_literal(self):
+        return "["
+
     def __repr__(self):
-        return f"ListLiteral(elements={len(self.elements)})"
+        return f"ListLiteral({len(self.elements)} elements)"
 
 class MapLiteral(Expression):
-    def __init__(self, pairs): 
+    def __init__(self, pairs):
         self.pairs = pairs
 
-    def __repr__(self):
-        return f"MapLiteral(pairs={len(self.pairs)})"
-
-class ActionLiteral(Expression):
-    def __init__(self, parameters, body):
-        self.parameters = parameters
-        self.body = body
+    def token_literal(self):
+        return "{"
 
     def __repr__(self):
-        return f"ActionLiteral(parameters={len(self.parameters)})"
+        return f"MapLiteral({len(self.pairs)} pairs)"
 
-# Lambda expression
-class LambdaExpression(Expression):
-    def __init__(self, parameters, body):
-        self.parameters = parameters
-        self.body = body
+class PrefixExpression(Expression):
+    def __init__(self, operator, right):
+        self.operator = operator
+        self.right = right
+
+    def token_literal(self):
+        return self.operator
 
     def __repr__(self):
-        return f"LambdaExpression(parameters={len(self.parameters)})"
+        return f"PrefixExpression('{self.operator}', {self.right})"
+
+class InfixExpression(Expression):
+    def __init__(self, left, operator, right):
+        self.left = left
+        self.operator = operator
+        self.right = right
+
+    def token_literal(self):
+        return self.operator
+
+    def __repr__(self):
+        return f"InfixExpression({self.left}, '{self.operator}', {self.right})"
 
 class CallExpression(Expression):
     def __init__(self, function, arguments):
         self.function = function
         self.arguments = arguments
 
+    def token_literal(self):
+        return self.function.token_literal()
+
     def __repr__(self):
-        return f"CallExpression(function={self.function}, arguments={len(self.arguments)})"
+        return f"CallExpression({self.function}, {len(self.arguments)} args)"
+
+class AssignmentExpression(Expression):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def token_literal(self):
+        return "="
+
+    def __repr__(self):
+        return f"AssignmentExpression({self.name}, {self.value})"
 
 class MethodCallExpression(Expression):
     def __init__(self, object, method, arguments):
@@ -237,46 +274,44 @@ class MethodCallExpression(Expression):
         self.method = method
         self.arguments = arguments
 
+    def token_literal(self):
+        return self.method.token_literal()
+
     def __repr__(self):
-        return f"MethodCallExpression(object={self.object}, method={self.method})"
+        return f"MethodCallExpression({self.object}.{self.method})"
 
 class PropertyAccessExpression(Expression):
     def __init__(self, object, property):
         self.object = object
         self.property = property
 
-    def __repr__(self):
-        return f"PropertyAccessExpression(object={self.object}, property={self.property})"
-
-class AssignmentExpression(Expression):
-    def __init__(self, name, value):
-        self.name = name
-        self.value = value
+    def token_literal(self):
+        return self.property.token_literal()
 
     def __repr__(self):
-        return f"AssignmentExpression(name={self.name}, value={self.value})"
+        return f"PropertyAccessExpression({self.object}.{self.property})"
 
-class EmbeddedLiteral(Expression):
-    def __init__(self, language, code):
-        self.language = language
-        self.code = code
+class LambdaExpression(Expression):
+    def __init__(self, parameters, body):
+        self.parameters = parameters
+        self.body = body
 
-    def __repr__(self):
-        return f"EmbeddedLiteral(language={self.language})"
-
-class PrefixExpression(Expression):
-    def __init__(self, operator, right): 
-        self.operator = operator; self.right = right
+    def token_literal(self):
+        return "lambda"
 
     def __repr__(self):
-        return f"PrefixExpression(operator='{self.operator}', right={self.right})"
+        return f"LambdaExpression({len(self.parameters)} params)"
 
-class InfixExpression(Expression):
-    def __init__(self, left, operator, right): 
-        self.left = left; self.operator = operator; self.right = right
+class ActionLiteral(Expression):
+    def __init__(self, parameters, body):
+        self.parameters = parameters
+        self.body = body
+
+    def token_literal(self):
+        return "action"
 
     def __repr__(self):
-        return f"InfixExpression(left={self.left}, operator='{self.operator}', right={self.right})"
+        return f"ActionLiteral({len(self.parameters)} params)"
 
 class IfExpression(Expression):
     def __init__(self, condition, consequence, alternative=None):
@@ -284,5 +319,19 @@ class IfExpression(Expression):
         self.consequence = consequence
         self.alternative = alternative
 
+    def token_literal(self):
+        return "if"
+
     def __repr__(self):
         return f"IfExpression(condition={self.condition})"
+
+class EmbeddedLiteral(Expression):
+    def __init__(self, language, code):
+        self.language = language
+        self.code = code
+
+    def token_literal(self):
+        return "embedded"
+
+    def __repr__(self):
+        return f"EmbeddedLiteral({self.language})"
