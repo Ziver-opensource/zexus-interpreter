@@ -1,10 +1,11 @@
-# parser.py (TOLERANT MULTI-STRATEGY PARSER)
+# src/zexus/parser.py
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
 from .strategy_structural import StructuralAnalyzer
 from .strategy_context import ContextStackParser
 from .strategy_recovery import ErrorRecoveryEngine
+from .config import config  # Import the config
 
 # Precedence constants
 LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
@@ -21,17 +22,21 @@ precedences = {
 }
 
 class UltimateParser:
-    def __init__(self, lexer, syntax_style="universal", enable_advanced_strategies=True):
+    def __init__(self, lexer, syntax_style=None, enable_advanced_strategies=None):
         self.lexer = lexer
-        self.syntax_style = syntax_style
-        self.enable_advanced_strategies = enable_advanced_strategies
+        self.syntax_style = syntax_style or config.syntax_style
+        self.enable_advanced_strategies = (
+            enable_advanced_strategies 
+            if enable_advanced_strategies is not None 
+            else config.enable_advanced_parsing
+        )
         self.errors = []
         self.cur_token = None
         self.peek_token = None
 
         # Multi-strategy architecture
-        if enable_advanced_strategies:
-            print("🚀 Initializing Ultimate Parser with Multi-Strategy Architecture...")
+        if self.enable_advanced_strategies:
+            self._log("🚀 Initializing Ultimate Parser with Multi-Strategy Architecture...", "normal")
             self.structural_analyzer = StructuralAnalyzer()
             self.context_parser = ContextStackParser(self.structural_analyzer)
             self.error_recovery = ErrorRecoveryEngine(self.structural_analyzer, self.context_parser)
@@ -53,7 +58,7 @@ class UltimateParser:
             LPAREN: self.parse_grouped_expression,
             IF: self.parse_if_expression,
             LBRACKET: self.parse_list_literal,
-            LBRACE: self.parse_map_literal,
+            LBRACE: self.parse_map_literal,  # CRITICAL: This handles { } objects
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
             LAMBDA: self.parse_lambda_expression,
@@ -82,35 +87,102 @@ class UltimateParser:
         self.next_token()
         self.next_token()
 
+    def _log(self, message, level="normal"):
+        """Controlled logging based on config"""
+        if not config.enable_debug_logs:
+            return
+        if level == "verbose" and config.enable_debug_logs:
+            print(message)
+        elif level in ["normal", "minimal"]:
+            print(message)
+
     def parse_program(self):
         """The tolerant parsing pipeline - FIXED"""
-        # For simple files or when advanced parsing is disabled, use traditional
         if not self.use_advanced_parsing:
             return self._parse_traditional()
 
         try:
-            print("🎯 Starting Tolerant Parsing Pipeline...")
-
-            # Phase 1: Structural Analysis (for context only)
+            self._log("🎯 Starting Tolerant Parsing Pipeline...", "normal")
+            
+            # Phase 1: Structural Analysis
             all_tokens = self._collect_all_tokens()
             self.block_map = self.structural_analyzer.analyze(all_tokens)
-            self.structural_analyzer.print_structure()
+            
+            if config.enable_debug_logs:
+                self.structural_analyzer.print_structure()
 
-            # Phase 2: Parse ALL blocks, not just "significant" ones
+            # Phase 2: Parse ALL blocks
             program = self._parse_all_blocks_tolerantly(all_tokens)
 
-            # If advanced parsing didn't find anything, fall back to traditional
+            # Fallback if advanced parsing fails
             if len(program.statements) == 0 and len(all_tokens) > 10:
-                print("🔄 Advanced parsing found no statements, falling back to traditional...")
+                self._log("🔄 Advanced parsing found no statements, falling back to traditional...", "normal")
                 return self._parse_traditional()
 
-            print(f"✅ Tolerant Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors")
+            self._log(f"✅ Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors", "minimal")
             return program
-
+            
         except Exception as e:
-            print(f"⚠️ Advanced parsing failed, falling back to traditional: {e}")
+            self._log(f"⚠️ Advanced parsing failed, falling back to traditional: {e}", "normal")
             self.use_advanced_parsing = False
             return self._parse_traditional()
+
+    def parse_map_literal(self):
+        """FIXED: Proper map literal parsing - THIS FIXES THE BUG"""
+        token = self.cur_token
+        pairs = []
+        
+        self._log(f"🔧 Parsing map literal at line {token.line}", "verbose")
+        
+        # The current token is LBRACE, we need to move to the next token
+        if not self.expect_peek(LBRACE):
+            return None
+            
+        self.next_token()  # Skip {
+
+        # Handle empty object
+        if self.cur_token_is(RBRACE):
+            self.next_token()  # Skip }
+            return MapLiteral(token=token, pairs=pairs)
+
+        # Parse key-value pairs
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            # Parse key
+            if self.cur_token_is(STRING):
+                key = StringLiteral(self.cur_token.literal)
+            elif self.cur_token_is(IDENT):
+                key = Identifier(self.cur_token.literal)
+            else:
+                self.errors.append(f"Line {self.cur_token.line}: Object key must be string or identifier, got {self.cur_token.type}")
+                return None
+
+            # Expect colon
+            if not self.expect_peek(COLON):
+                return None
+
+            # Parse value
+            self.next_token()
+            value = self.parse_expression(LOWEST)
+            if not value:
+                return None
+
+            pairs.append((key, value))
+
+            # Check for comma or end
+            if self.peek_token_is(COMMA):
+                self.next_token()
+            elif not self.peek_token_is(RBRACE):
+                self.errors.append(f"Line {self.cur_token.line}: Expected ',' or '}}'")
+                return None
+
+            self.next_token()
+
+        if not self.cur_token_is(RBRACE):
+            self.errors.append(f"Line {self.cur_token.line}: Expected '}}'")
+            return None
+
+        self._log(f"✅ Successfully parsed map literal with {len(pairs)} pairs", "verbose")
+        return MapLiteral(token=token, pairs=pairs)
 
     def _collect_all_tokens(self):
         """Collect all tokens for structural analysis"""
@@ -145,13 +217,13 @@ class UltimateParser:
         parsed_count = 0
         error_count = 0
 
-        # Parse ALL top-level blocks, not just "significant" ones
+        # Parse ALL top-level blocks
         top_level_blocks = [
             block_id for block_id, block_info in self.block_map.items()
             if not block_info.get('parent')  # Only top-level blocks
         ]
 
-        print(f"🎯 Parsing {len(top_level_blocks)} top-level blocks (tolerant mode)")
+        self._log(f"🔧 Parsing {len(top_level_blocks)} top-level blocks...", "normal")
 
         for block_id in top_level_blocks:
             block_info = self.block_map[block_id]
@@ -160,40 +232,35 @@ class UltimateParser:
                 if statement:
                     program.statements.append(statement)
                     parsed_count += 1
-                    # Debug output for what was parsed
-                    stmt_type = type(statement).__name__
-                    print(f"  ✅ Parsed: {stmt_type} at line {block_info['start_token'].line}")
-
+                    if config.enable_debug_logs:  # Only show detailed parsing in verbose mode
+                        stmt_type = type(statement).__name__
+                        self._log(f"  ✅ Parsed: {stmt_type} at line {block_info['start_token'].line}", "verbose")
+                        
             except Exception as e:
                 error_msg = f"Line {block_info['start_token'].line}: {str(e)}"
                 self.errors.append(error_msg)
                 error_count += 1
-                print(f"  ❌ Parse error: {error_msg}")
+                self._log(f"  ❌ Parse error: {error_msg}", "normal")
 
-        # If we still have no statements but there are tokens, try traditional parsing on the problematic blocks
+        # Traditional fallback if no blocks were parsed
         if parsed_count == 0 and top_level_blocks:
-            print("🔄 No blocks parsed with context parser, trying traditional fallback...")
+            self._log("🔄 No blocks parsed with context parser, trying traditional fallback...", "normal")
             for block_id in top_level_blocks[:3]:  # Try first 3 blocks
                 block_info = self.block_map[block_id]
                 try:
-                    # Extract tokens for this block and parse traditionally
                     block_tokens = block_info['tokens']
                     if block_tokens:
-                        # Create a mini-lexer for just these tokens
                         block_code = ' '.join([t.literal for t in block_tokens if t.literal])
                         mini_lexer = Lexer(block_code)
                         mini_parser = UltimateParser(mini_lexer, self.syntax_style, False)
                         mini_program = mini_parser.parse_program()
-
                         if mini_program.statements:
                             program.statements.extend(mini_program.statements)
                             parsed_count += len(mini_program.statements)
-                            print(f"  ✅ Traditional fallback parsed {len(mini_program.statements)} statements")
-
+                            self._log(f"  ✅ Traditional fallback parsed {len(mini_program.statements)} statements", "normal")
                 except Exception as e:
-                    print(f"  ❌ Traditional fallback also failed: {e}")
+                    self._log(f"  ❌ Traditional fallback also failed: {e}", "normal")
 
-        print(f"✅ Successfully parsed {parsed_count} statements with {error_count} errors")
         return program
 
     def _parse_traditional(self):
@@ -245,7 +312,7 @@ class UltimateParser:
             # TOLERANT: Don't stop execution for parse errors, just log and continue
             error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}"
             self.errors.append(error_msg)
-            print(f"⚠️  {error_msg}")
+            self._log(f"⚠️  {error_msg}", "normal")
 
             # Try to recover and continue
             self.recover_to_next_statement()
@@ -407,8 +474,6 @@ class UltimateParser:
             self.next_token()
 
         return stmt
-
-    # === REST OF PARSER METHODS (with tolerant modifications) ===
 
     def parse_try_catch_statement(self):
         """Enhanced try-catch parsing with structural awareness"""
@@ -869,31 +934,6 @@ class UltimateParser:
         list_lit = ListLiteral(elements=[])
         list_lit.elements = self.parse_expression_list(RBRACKET)
         return list_lit
-
-    def parse_map_literal(self):
-        pairs = []
-        self.next_token()
-
-        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-            key = self.parse_expression(LOWEST)
-            if not key:
-                return None
-
-            if not self.expect_peek(COLON):
-                return None
-
-            self.next_token()
-            value = self.parse_expression(LOWEST)
-            if not value:
-                return None
-
-            pairs.append((key, value))
-
-            if self.peek_token_is(COMMA):
-                self.next_token()
-            self.next_token()
-
-        return MapLiteral(pairs)
 
     def parse_call_expression(self, function):
         exp = CallExpression(function=function, arguments=[])
