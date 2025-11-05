@@ -171,7 +171,7 @@ class UltimateParser:
         
             self.next_token()  # Move to next token
 
-     if not self.cur_token_is(RBRACE):
+      if not self.cur_token_is(RBRACE):
         self.errors.append(f"Line {self.cur_token.line}: Expected '}}'")
         return None
 
