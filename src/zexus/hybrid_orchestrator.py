@@ -7,20 +7,16 @@ import os
 import time
 from .lexer import Lexer
 from .parser import UltimateParser
-from .evaluator import Evaluator
-from .object import Environment
+from .evaluator import eval_node, Environment
 from .config import config
 
-# Try to import compiler components (they might not be fully implemented yet)
+# Try to import compiler components
 try:
-    from .compiler.lexer import CompilerLexer
-    from .compiler.parser import CompilerParser
-    from .compiler.semantic import SemanticAnalyzer
-    from .vm.vm import VM
+    from .compiler import ZexusCompiler
+    from .vm import ZexusVM
     COMPILER_AVAILABLE = True
 except ImportError:
     COMPILER_AVAILABLE = False
-    print("⚠️  Compiler components not available, using interpreter only")
 
 class HybridOrchestrator:
     def __init__(self):
@@ -28,7 +24,7 @@ class HybridOrchestrator:
         self.compiler_used = 0
         self.fallbacks = 0
         
-    def should_use_compiler(self, code):
+    def should_use_compiler(self, code, syntax_style="auto"):
         """
         Smart rules for when to use compiler vs interpreter
         """
@@ -37,7 +33,7 @@ class HybridOrchestrator:
             
         # Rule 1: Large files (> 100 lines) benefit from compilation
         line_count = len(code.split('\n'))
-        if line_count > 100:
+        if line_count > config.compiler_line_threshold:
             return True
             
         # Rule 2: Code with complex loops (for, while) 
@@ -54,10 +50,14 @@ class HybridOrchestrator:
         if "// compile" in code or "# compile" in code:
             return True
             
+        # Rule 5: Universal syntax is more compiler-friendly
+        if syntax_style == "universal":
+            return True
+            
         # Default: Use interpreter for simple scripts
         return False
     
-    def compile_and_execute(self, code, environment=None):
+    def compile_and_execute(self, code, environment=None, syntax_style="auto"):
         """
         Execute code using the compiler/VM path
         """
@@ -67,29 +67,16 @@ class HybridOrchestrator:
                 
             print("🔧 Compiling code...")
             
-            # Use compiler lexer and parser
-            lexer = CompilerLexer(code)
-            parser = CompilerParser(lexer)
-            program = parser.parse_program()
+            # Use the ZexusCompiler
+            compiler = ZexusCompiler(code)
+            bytecode = compiler.compile()
             
-            if len(parser.errors) > 0:
-                raise Exception(f"Compilation errors: {parser.errors}")
+            if compiler.errors:
+                raise Exception(f"Compilation errors: {compiler.errors}")
             
-            # Semantic analysis
-            analyzer = SemanticAnalyzer()
-            analyzer.analyze(program)
-            
-            if len(analyzer.errors) > 0:
-                raise Exception(f"Semantic errors: {analyzer.errors}")
-            
-            # Generate bytecode and execute in VM
-            # Note: This part might need adaptation based on your VM implementation
-            from .compiler.bytecode import BytecodeGenerator
-            generator = BytecodeGenerator()
-            bytecode = generator.generate(program)
-            
-            vm = VM()
-            result = vm.execute(bytecode)
+            # Execute in VM
+            vm = ZexusVM(bytecode)
+            result = vm.execute()
             
             self.compiler_used += 1
             return result
@@ -99,16 +86,16 @@ class HybridOrchestrator:
             if config.fallback_to_interpreter:
                 print("🔄 Falling back to interpreter...")
                 self.fallbacks += 1
-                return self.interpret(code, environment)
+                return self.interpret(code, environment, syntax_style)
             else:
                 raise
     
-    def interpret(self, code, environment=None):
+    def interpret(self, code, environment=None, syntax_style="auto"):
         """
         Execute code using the interpreter path
         """
         lexer = Lexer(code)
-        parser = UltimateParser(lexer)
+        parser = UltimateParser(lexer, syntax_style)
         program = parser.parse_program()
         
         if len(parser.errors) > 0:
@@ -117,38 +104,38 @@ class HybridOrchestrator:
         if environment is None:
             environment = Environment()
             
-        evaluator = Evaluator()
-        result = evaluator.eval(program, environment)
+        result = eval_node(program, environment)
         
         self.interpreter_used += 1
         return result
     
-    def execute(self, code, environment=None, mode="auto"):
+    def execute(self, code, environment=None, mode="auto", syntax_style="auto"):
         """
         Main entry point - decides execution strategy
         """
         start_time = time.time()
         
         if mode == "interpreter":
-            result = self.interpret(code, environment)
+            result = self.interpret(code, environment, syntax_style)
         elif mode == "compiler":
-            result = self.compile_and_execute(code, environment)
+            result = self.compile_and_execute(code, environment, syntax_style)
         else:  # auto mode
-            if self.should_use_compiler(code):
-                result = self.compile_and_execute(code, environment)
+            if self.should_use_compiler(code, syntax_style):
+                result = self.compile_and_execute(code, environment, syntax_style)
             else:
-                result = self.interpret(code, environment)
+                result = self.interpret(code, environment, syntax_style)
         
         execution_time = time.time() - start_time
         
-        if config.enable_debug_logs:
-            self._print_execution_stats(execution_time)
+        if config.enable_debug_logs and config.enable_execution_stats:
+            self._print_execution_stats(execution_time, mode)
             
         return result
     
-    def _print_execution_stats(self, execution_time):
+    def _print_execution_stats(self, execution_time, mode):
         """Print execution statistics"""
         print(f"\n📊 Execution Statistics:")
+        print(f"   Mode: {mode}")
         print(f"   Time: {execution_time:.4f}s")
         print(f"   Interpreter uses: {self.interpreter_used}")
         print(f"   Compiler uses: {self.compiler_used}")
