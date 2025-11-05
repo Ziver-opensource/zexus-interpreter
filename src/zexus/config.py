@@ -1,6 +1,6 @@
 # src/zexus/config.py
 """
-Configuration system for Zexus Hybrid Architecture
+Enhanced Configuration system for Zexus Hybrid Architecture
 """
 
 class ZexusConfig:
@@ -18,15 +18,20 @@ class ZexusConfig:
         # Performance settings
         self.optimize_bytecode = True
         self.cache_compiled_code = False
+        
+        # Execution thresholds
+        self.compiler_line_threshold = 100  # Use compiler for files > 100 lines
+        self.enable_execution_stats = True
     
     @classmethod
     def production(cls):
         """Production configuration - minimal logging, maximum performance"""
         config = cls()
         config.enable_debug_logs = False
-        config.enable_advanced_parsing = False  # Use simple parser in production
+        config.enable_advanced_parsing = False
         config.use_hybrid_compiler = True
         config.optimize_bytecode = True
+        config.enable_execution_stats = False
         return config
     
     @classmethod
@@ -36,7 +41,18 @@ class ZexusConfig:
         config.enable_debug_logs = True
         config.enable_advanced_parsing = True
         config.use_hybrid_compiler = False  # Use interpreter for debugging
+        config.enable_execution_stats = True
+        return config
+    
+    @classmethod
+    def performance(cls):
+        """Performance configuration - always use compiler when possible"""
+        config = cls()
+        config.enable_debug_logs = False
+        config.use_hybrid_compiler = True
+        config.fallback_to_interpreter = False  # No fallback - fail if compiler fails
+        config.compiler_line_threshold = 10  # Use compiler for even small files
         return config
 
 # Global configuration instance
-config = ZexusConfig.production()  # Default to production mode
+config = ZexusConfig.development()  # Default to development for now
