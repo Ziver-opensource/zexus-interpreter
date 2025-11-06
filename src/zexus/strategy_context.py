@@ -149,7 +149,7 @@ class ContextStackParser:
             value_expression = self._parse_map_literal(value_tokens)
         else:
             value_expression = self._parse_expression(value_tokens)
-            
+
         if value_expression is None:
             print("  ❌ Could not parse value expression")
             return None
@@ -187,7 +187,7 @@ class ContextStackParser:
 
         variable_name = tokens[0].literal
         value_tokens = tokens[2:]
-        
+
         # CRITICAL FIX: Check if this is a map literal
         if value_tokens and value_tokens[0].type == LBRACE:
             print("  🗺️ Detected map literal in assignment")
@@ -249,14 +249,15 @@ class ContextStackParser:
     # === MAP LITERAL PARSING ===
 
     def _parse_map_literal(self, tokens):
-        """Parse a map literal { key: value, ... } - NEW METHOD"""
+        """Parse a map literal { key: value, ... } - FIXED VERSION"""
         print("  🗺️ [Map] Parsing map literal")
         
         if not tokens or tokens[0].type != LBRACE:
             print("  ❌ [Map] Not a map literal - no opening brace")
             return None
 
-        map_literal = MapLiteral()
+        # CRITICAL FIX: Initialize with empty pairs dictionary
+        pairs = {}
         i = 1  # Skip opening brace
         
         while i < len(tokens) and tokens[i].type != RBRACE:
@@ -286,7 +287,9 @@ class ContextStackParser:
                     else:
                         key = StringLiteral(key_token.literal)
                     
-                    map_literal.pairs[key] = value_expr
+                    # CRITICAL FIX: Store as tuple in list format (as expected by MapLiteral)
+                    # MapLiteral expects pairs as a list of tuples [(key, value), ...]
+                    pairs[key] = value_expr
                     print(f"  🗺️ [Map] Added pair: {key_token.literal} -> {type(value_expr).__name__}")
                 
                 # Move to next token after comma or value
@@ -297,7 +300,14 @@ class ContextStackParser:
                 # No colon found, skip this token
                 i += 1
 
-        print(f"  🗺️ [Map] Successfully parsed map with {len(map_literal.pairs)} pairs")
+        # CRITICAL FIX: Convert the pairs dictionary to the expected list format
+        pairs_list = []
+        for key, value in pairs.items():
+            pairs_list.append((key, value))
+
+        # CRITICAL FIX: Create MapLiteral with the required pairs parameter
+        map_literal = MapLiteral(pairs_list)
+        print(f"  🗺️ [Map] Successfully parsed map with {len(pairs_list)} pairs")
         return map_literal
 
     # === EXPRESSION PARSING METHODS ===
