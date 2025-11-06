@@ -928,41 +928,42 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == MethodCallExpression:
             debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
             obj = eval_node(node.object, env, stack_trace)
-            if isinstance(obj, (EvaluationError, ObjectEvaluationError)):
+            if is_error(obj):
                 return obj
             method_name = node.method.value
 
             # Handle array methods with lambdas
             if isinstance(obj, List):
                 args = eval_expressions(node.arguments, env)
-                if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
-                    return args
+                # FIXED: treat any error (including FixedEvaluationError) as error
+				if is_error(args):
+					return args
 
-                if method_name == "reduce":
-                    if len(args) < 1:
-                        return EvaluationError("reduce() requires at least a lambda function")
-                    lambda_fn = args[0]
-                    initial = args[1] if len(args) > 1 else None
-                    return array_reduce(obj, lambda_fn, initial, env)
-                elif method_name == "map":
-                    if len(args) != 1:
-                        return EvaluationError("map() requires exactly one lambda function")
-                    return array_map(obj, args[0], env)
-                elif method_name == "filter":
-                    if len(args) != 1:
-                        return EvaluationError("filter() requires exactly one lambda function")
-                    return array_filter(obj, args[0], env)
+				if method_name == "reduce":
+					if len(args) < 1:
+						return EvaluationError("reduce() requires at least a lambda function")
+					lambda_fn = args[0]
+					initial = args[1] if len(args) > 1 else None
+					return array_reduce(obj, lambda_fn, initial, env)
+				elif method_name == "map":
+					if len(args) != 1:
+						return EvaluationError("map() requires exactly one lambda function")
+					return array_map(obj, args[0], env)
+				elif method_name == "filter":
+					if len(args) != 1:
+						return EvaluationError("filter() requires exactly one lambda function")
+					return array_filter(obj, args[0], env)
 
             # Handle embedded code method calls
             if isinstance(obj, EmbeddedCode):
-                args = eval_expressions(node.arguments, env)
-                if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
-                    return args
-                # Simplified embedded execution
-                print(f"[EMBED] Executing {obj.language}.{method_name}")
-                return Integer(42)
+				args = eval_expressions(node.arguments, env)
+				if is_error(args):
+					return args
+				# Simplified embedded execution
+				print(f"[EMBED] Executing {obj.language}.{method_name}")
+				return Integer(42)
 
-            return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
+			return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
 
         elif node_type == EmbeddedLiteral:
             debug_log("  EmbeddedLiteral node")
@@ -1020,20 +1021,22 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == ListLiteral:
             debug_log("  ListLiteral node", f"{len(node.elements)} elements")
             elements = eval_expressions(node.elements, env)
-            if isinstance(elements, (ReturnValue, EvaluationError, ObjectEvaluationError)):
-                return elements
-            return List(elements)
+            # FIXED: use is_error helper
+			if is_error(elements):
+				return elements
+			return List(elements)
 
         elif node_type == MapLiteral:
             debug_log("  MapLiteral node", f"{len(node.pairs)} pairs")
             pairs = {}
             for key_expr, value_expr in node.pairs:
                 key = eval_node(key_expr, env, stack_trace)
-                if isinstance(key, (EvaluationError, ObjectEvaluationError)):
-                    return key
+                # FIXED: use is_error helper
+				if is_error(key):
+					return key
                 value = eval_node(value_expr, env, stack_trace)
-                if isinstance(value, (EvaluationError, ObjectEvaluationError)):
-                    return value
+                if is_error(value):
+					return value
                 key_str = key.inspect()
                 pairs[key_str] = value
             return Map(pairs)
@@ -1050,19 +1053,18 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == CallExpression:
             debug_log("🚀 CallExpression node", f"Calling {node.function}")
             function = eval_node(node.function, env, stack_trace)
-            debug_log("  Function resolved", f"{function} (type: {type(function).__name__})")
-
-            if isinstance(function, (EvaluationError, ObjectEvaluationError)):
-                debug_log("  Function evaluation error", function)
-                return function
+            if is_error(function):
+				debug_log("  Function evaluation error", function)
+				return function
 
             args = eval_expressions(node.arguments, env)
-            arg_count = len(args) if isinstance(args, (list, tuple)) else ("err" if is_error(args) else "unknown")
-            debug_log("  Arguments evaluated", f"{args} (count: {arg_count})")
+            # FIXED: detect error results using is_error() BEFORE attempting to len()/unpack
+            if is_error(args):
+				debug_log("  Arguments evaluation error", args)
+				return args
 
-            if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
-                debug_log("  Arguments evaluation error", args)
-                return args
+            arg_count = len(args) if isinstance(args, (list, tuple)) else "unknown"
+            debug_log("  Arguments evaluated", f"{args} (count: {arg_count})")
 
             # CRITICAL FIX: Ensure builtin functions are called properly
             debug_log("  Calling apply_function", f"function: {function}, args: {args}")

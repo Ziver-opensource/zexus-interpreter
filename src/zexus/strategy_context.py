@@ -138,10 +138,21 @@ class ContextStackParser:
             print("  ❌ Invalid let statement: no assignment operator")
             return None
 
-        value_tokens = tokens[equals_index + 1:]
+        # CRITICAL FIX: only collect RHS tokens up to a statement boundary
+        value_tokens = []
+        stop_types = {SEMICOLON, RBRACE}
+        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
+        j = equals_index + 1
+        while j < len(tokens):
+            t = tokens[j]
+            # stop if we hit an explicit terminator or the start of next statement
+            if t.type in stop_types or t.type in statement_starters:
+                break
+            value_tokens.append(t)
+            j += 1
         print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
 
-        # Check if this is a map literal
+        # CRITICAL FIX: Check if this is a map literal
         if value_tokens and value_tokens[0].type == LBRACE:
             print("  🗺️ Detected map literal in let statement")
             value_expression = self._parse_map_literal(value_tokens)
@@ -184,7 +195,17 @@ class ContextStackParser:
             return None
 
         variable_name = tokens[0].literal
-        value_tokens = tokens[2:]
+        # CRITICAL FIX: only collect RHS tokens up to statement boundary
+        value_tokens = []
+        stop_types = {SEMICOLON, RBRACE}
+        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
+        j = 2
+        while j < len(tokens):
+            t = tokens[j]
+            if t.type in stop_types or t.type in statement_starters:
+                break
+            value_tokens.append(t)
+            j += 1
 
         # Check if this is a map literal
         if value_tokens and value_tokens[0].type == LBRACE:
