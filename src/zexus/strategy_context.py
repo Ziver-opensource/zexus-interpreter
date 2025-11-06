@@ -115,7 +115,7 @@ class ContextStackParser:
     # === DIRECT STATEMENT PARSERS - THESE RETURN ACTUAL STATEMENTS ===
 
     def _parse_let_statement_block(self, block_info, all_tokens):
-        """Parse let statement block - FIXED to handle map literals"""
+        """Parse let statement block - RETURNS LetStatement"""
         print("🔧 [Context] Parsing let statement")
         tokens = block_info['tokens']
 
@@ -143,9 +143,9 @@ class ContextStackParser:
         value_tokens = tokens[equals_index + 1:]
         print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
 
-        # CRITICAL FIX: Check if this is a map literal and parse it properly
+        # CRITICAL FIX: Check if this is a map literal
         if value_tokens and value_tokens[0].type == LBRACE:
-            print("  🗺️  Parsing as map literal...")
+            print("  🗺️ Detected map literal in let statement")
             value_expression = self._parse_map_literal(value_tokens)
         else:
             value_expression = self._parse_expression(value_tokens)
@@ -159,79 +159,6 @@ class ContextStackParser:
             name=Identifier(variable_name),
             value=value_expression
         )
-
-    def _parse_map_literal(self, tokens):
-        """Parse map literal from tokens - FIXED"""
-        print("  🔧 [Context] Parsing map literal from tokens")
-        
-        if not tokens or tokens[0].type != LBRACE:
-            print("  ❌ Not a valid map literal - no opening brace")
-            return None
-
-        pairs = []
-        i = 1  # Skip opening brace
-        
-        while i < len(tokens) and tokens[i].type != RBRACE:
-            # Parse key
-            if tokens[i].type == STRING:
-                key = StringLiteral(tokens[i].literal)
-            elif tokens[i].type == IDENT:
-                key = Identifier(tokens[i].literal)
-            else:
-                print(f"  ❌ Invalid map key: {tokens[i].type}")
-                return None
-
-            # Expect colon
-            i += 1
-            if i >= len(tokens) or tokens[i].type != COLON:
-                print("  ❌ Expected colon after map key")
-                return None
-
-            # Parse value
-            i += 1
-            if i >= len(tokens):
-                print("  ❌ Expected value after colon")
-                return None
-
-            # Parse value expression (could be simple value or nested structure)
-            value_start = i
-            value_end = i
-            
-            # Find the end of this value (comma or closing brace)
-            brace_count = 0
-            while value_end < len(tokens) and tokens[value_end].type != RBRACE:
-                if tokens[value_end].type == COMMA and brace_count == 0:
-                    break
-                if tokens[value_end].type == LBRACE:
-                    brace_count += 1
-                elif tokens[value_end].type == RBRACE:
-                    brace_count -= 1
-                value_end += 1
-
-            value_tokens = tokens[i:value_end]
-            value_expression = self._parse_expression(value_tokens)
-            
-            if value_expression is None:
-                print("  ❌ Could not parse map value")
-                return None
-
-            pairs.append((key, value_expression))
-            i = value_end
-
-            # Skip comma if present
-            if i < len(tokens) and tokens[i].type == COMMA:
-                i += 1
-            
-            # This check is crucial to prevent infinite loop if the RBRACE is missing
-            if i == len(tokens) and tokens[i-1].type != RBRACE:
-                print("  ⚠️ Warning: Reached end of tokens without closing map brace.")
-                break
-
-        print(f"  ✅ Parsed map literal with {len(pairs)} pairs")
-        
-        # Create MapLiteral - it is now imported from .zexus_ast
-        return MapLiteral(pairs=pairs)
-
 
     def _parse_print_statement_block(self, block_info, all_tokens):
         """Parse print statement block - RETURNS PrintStatement"""
@@ -260,7 +187,13 @@ class ContextStackParser:
 
         variable_name = tokens[0].literal
         value_tokens = tokens[2:]
-        value_expression = self._parse_expression(value_tokens)
+        
+        # CRITICAL FIX: Check if this is a map literal
+        if value_tokens and value_tokens[0].type == LBRACE:
+            print("  🗺️ Detected map literal in assignment")
+            value_expression = self._parse_map_literal(value_tokens)
+        else:
+            value_expression = self._parse_expression(value_tokens)
 
         if value_expression is None:
             print("  ❌ Could not parse assignment value")
@@ -313,6 +246,60 @@ class ContextStackParser:
             return ExpressionStatement(expression)
         return None
 
+    # === MAP LITERAL PARSING ===
+
+    def _parse_map_literal(self, tokens):
+        """Parse a map literal { key: value, ... } - NEW METHOD"""
+        print("  🗺️ [Map] Parsing map literal")
+        
+        if not tokens or tokens[0].type != LBRACE:
+            print("  ❌ [Map] Not a map literal - no opening brace")
+            return None
+
+        map_literal = MapLiteral()
+        i = 1  # Skip opening brace
+        
+        while i < len(tokens) and tokens[i].type != RBRACE:
+            # Parse key-value pair
+            key_token = tokens[i]
+            
+            # Skip colon
+            if i + 1 < len(tokens) and tokens[i + 1].type == COLON:
+                # Parse value
+                value_start = i + 2
+                value_tokens = []
+                
+                # Collect value tokens until comma or closing brace
+                j = value_start
+                while j < len(tokens) and tokens[j].type not in [COMMA, RBRACE]:
+                    value_tokens.append(tokens[j])
+                    j += 1
+                
+                # Parse the value expression
+                value_expr = self._parse_expression(value_tokens)
+                if value_expr:
+                    # Create the key (could be identifier or string)
+                    if key_token.type == IDENT:
+                        key = Identifier(key_token.literal)
+                    elif key_token.type == STRING:
+                        key = StringLiteral(key_token.literal)
+                    else:
+                        key = StringLiteral(key_token.literal)
+                    
+                    map_literal.pairs[key] = value_expr
+                    print(f"  🗺️ [Map] Added pair: {key_token.literal} -> {type(value_expr).__name__}")
+                
+                # Move to next token after comma or value
+                i = j
+                if i < len(tokens) and tokens[i].type == COMMA:
+                    i += 1  # Skip comma
+            else:
+                # No colon found, skip this token
+                i += 1
+
+        print(f"  🗺️ [Map] Successfully parsed map with {len(map_literal.pairs)} pairs")
+        return map_literal
+
     # === EXPRESSION PARSING METHODS ===
 
     def _parse_paren_block_context(self, block_info, all_tokens):
@@ -356,6 +343,10 @@ class ContextStackParser:
         if not tokens:
             return StringLiteral("")
 
+        # Check for map literal first
+        if tokens[0].type == LBRACE:
+            return self._parse_map_literal(tokens)
+
         # Handle string concatenation: "a" + "b" + "c"
         for i, token in enumerate(tokens):
             if token.type == PLUS:
@@ -371,10 +362,6 @@ class ContextStackParser:
             arg_tokens = self._extract_nested_tokens(tokens, 1)
             arguments = self._parse_argument_list(arg_tokens)
             return CallExpression(Identifier(function_name), arguments)
-        
-        # Handle map literals in expressions: { key: value }
-        if tokens[0].type == LBRACE:
-            return self._parse_map_literal(tokens)
 
         # Handle single token expressions
         if len(tokens) == 1:
@@ -450,19 +437,9 @@ class ContextStackParser:
         """Parse comma-separated argument list"""
         arguments = []
         current_arg = []
-        brace_count = 0
-        paren_count = 0
-        bracket_count = 0
 
         for token in tokens:
-            if token.type == LBRACE: brace_count += 1
-            elif token.type == RBRACE: brace_count -= 1
-            elif token.type == LPAREN: paren_count += 1
-            elif token.type == RPAREN: paren_count -= 1
-            elif token.type == LBRACKET: bracket_count += 1
-            elif token.type == RBRACKET: bracket_count -= 1
-
-            if token.type == COMMA and brace_count == 0 and paren_count == 0 and bracket_count == 0:
+            if token.type == COMMA:
                 if current_arg:
                     arguments.append(self._parse_expression(current_arg))
                     current_arg = []
@@ -508,4 +485,86 @@ class ContextStackParser:
 
     def _parse_screen_context(self, block_info, all_tokens):
         """Parse screen blocks with context awareness"""
-        print(f"🔧 [Context] Parsing screen: {block_info.get(
+        print(f"🔧 [Context] Parsing screen: {block_info.get('name', 'anonymous')}")
+        return ScreenStatement(
+            name=Identifier(block_info.get('name', 'anonymous')),
+            body=BlockStatement()
+        )
+
+    def _parse_try_catch_context(self, block_info, all_tokens):
+        """Parse try-catch block with full context awareness"""
+        print("🔧 [Context] Parsing try-catch block with context awareness")
+        error_var = self._extract_catch_variable(block_info['tokens'])
+        return TryCatchStatement(
+            try_block=BlockStatement(),
+            error_variable=error_var,
+            catch_block=BlockStatement()
+        )
+
+    def _parse_function_context(self, block_info, all_tokens):
+        """Parse function block with context awareness"""
+        print(f"🔧 [Context] Parsing function: {block_info.get('name', 'anonymous')}")
+        params = self._extract_function_parameters(block_info, all_tokens)
+        return ActionStatement(
+            name=Identifier(block_info.get('name', 'anonymous')),
+            parameters=params,
+            body=BlockStatement()
+        )
+
+    def _parse_conditional_context(self, block_info, all_tokens):
+        """Parse if/else blocks with context awareness"""
+        print("🔧 [Context] Parsing conditional block")
+        condition = self._extract_condition(block_info, all_tokens)
+        return IfStatement(
+            condition=condition,
+            consequence=BlockStatement(),
+            alternative=None
+        )
+
+    def _parse_brace_block_context(self, block_info, all_tokens):
+        """Parse generic brace block with context awareness"""
+        print("🔧 [Context] Parsing brace block")
+        return BlockStatement()
+
+    def _parse_generic_block(self, block_info, all_tokens):
+        """Fallback parser for unknown block types"""
+        return BlockStatement()
+
+    # Helper methods
+    def _extract_catch_variable(self, tokens):
+        """Extract the error variable from catch block"""
+        for i, token in enumerate(tokens):
+            if token.type == CATCH and i + 1 < len(tokens):
+                if tokens[i + 1].type == LPAREN and i + 2 < len(tokens):
+                    if tokens[i + 2].type == IDENT:
+                        return Identifier(tokens[i + 2].literal)
+                elif tokens[i + 1].type == IDENT:
+                    return Identifier(tokens[i + 1].literal)
+        return Identifier("error")
+
+    def _extract_function_parameters(self, block_info, all_tokens):
+        """Extract function parameters from function signature"""
+        params = []
+        start_idx = block_info['start_index']
+        for i in range(max(0, start_idx - 10), start_idx):
+            if i < len(all_tokens) and all_tokens[i].type == LPAREN:
+                j = i + 1
+                while j < len(all_tokens) and all_tokens[j].type != RPAREN:
+                    if all_tokens[j].type == IDENT:
+                        params.append(Identifier(all_tokens[j].literal))
+                    j += 1
+                break
+        return params
+
+    def _extract_condition(self, block_info, all_tokens):
+        """Extract condition from conditional statements"""
+        start_idx = block_info['start_index']
+        for i in range(max(0, start_idx - 5), start_idx):
+            if i < len(all_tokens) and all_tokens[i].type == LPAREN:
+                j = i + 1
+                while j < len(all_tokens) and all_tokens[j].type != RPAREN:
+                    if all_tokens[j].type == IDENT:
+                        return Identifier(all_tokens[j].literal)
+                    j += 1
+                break
+        return Identifier("true")
