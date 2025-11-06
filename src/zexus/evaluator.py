@@ -99,7 +99,7 @@ def eval_expressions(expressions, env):
     for i, expr in enumerate(expressions):
         debug_log(f"  Expression {i+1}", type(expr).__name__)
         result = eval_node(expr, env)
-        if isinstance(result, (ReturnValue, EvaluationError, ObjectEvaluationError)):
+        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
             debug_log("  Expression evaluation interrupted", result)
             return result
         results.append(result)
@@ -123,7 +123,9 @@ def eval_identifier(node, env):
     return EvaluationError(f"Identifier '{node.value}' not found")
 
 def is_truthy(obj):
-    result = not (obj == NULL or obj == FALSE or isinstance(obj, (EvaluationError, ObjectEvaluationError)))
+    if isinstance(obj, (EvaluationError, ObjectEvaluationError)):
+        return False
+    result = not (obj == NULL or obj == FALSE)
     debug_log("is_truthy", f"{obj} -> {result}")
     return result
 
@@ -172,13 +174,26 @@ def eval_infix_expression(operator, left, right):
     elif operator == "||":
         result = TRUE if is_truthy(left) or is_truthy(right) else FALSE
     elif operator == "==":
-        result = TRUE if left.value == right.value else FALSE
+        # FIXED: Handle different object types properly
+        if hasattr(left, 'value') and hasattr(right, 'value'):
+            result = TRUE if left.value == right.value else FALSE
+        else:
+            result = TRUE if left == right else FALSE
     elif operator == "!=":
-        result = TRUE if left.value != right.value else FALSE
+        if hasattr(left, 'value') and hasattr(right, 'value'):
+            result = TRUE if left.value != right.value else FALSE
+        else:
+            result = TRUE if left != right else FALSE
     elif operator == "<=":
-        result = TRUE if left.value <= right.value else FALSE
+        if hasattr(left, 'value') and hasattr(right, 'value'):
+            result = TRUE if left.value <= right.value else FALSE
+        else:
+            result = EvaluationError(f"Cannot compare: {left.type()} <= {right.type()}")
     elif operator == ">=":
-        result = TRUE if left.value >= right.value else FALSE
+        if hasattr(left, 'value') and hasattr(right, 'value'):
+            result = TRUE if left.value >= right.value else FALSE
+        else:
+            result = EvaluationError(f"Cannot compare: {left.type()} >= {right.type()}")
     # Type-specific operations
     elif isinstance(left, Integer) and isinstance(right, Integer):
         result = eval_integer_infix_expression(operator, left, right)
@@ -196,6 +211,15 @@ def eval_infix_expression(operator, left, right):
             # Convert left to string and concatenate
             left_str = left.inspect() if not isinstance(left, String) else left.value
             result = String(str(left_str) + right.value)
+        elif isinstance(left, Integer) and isinstance(right, Integer):
+            result = Integer(left.value + right.value)
+        elif isinstance(left, Float) and isinstance(right, Float):
+            result = Float(left.value + right.value)
+        elif isinstance(left, (Integer, Float)) and isinstance(right, (Integer, Float)):
+            # Mixed numeric types
+            left_val = left.value if isinstance(left, (Integer, Float)) else float(left.value) if hasattr(left, 'value') else 0
+            right_val = right.value if isinstance(right, (Integer, Float)) else float(right.value) if hasattr(right, 'value') else 0
+            result = Float(left_val + right_val)
         else:
             result = EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
     else:
@@ -212,10 +236,12 @@ def eval_integer_infix_expression(operator, left, right):
     elif operator == "-": return Integer(left_val - right_val)
     elif operator == "*": return Integer(left_val * right_val)
     elif operator == "/": 
-        if right_val == 0: return EvaluationError("Division by zero")
+        if right_val == 0: 
+            return EvaluationError("Division by zero")
         return Integer(left_val // right_val)
     elif operator == "%": 
-        if right_val == 0: return EvaluationError("Modulo by zero")
+        if right_val == 0: 
+            return EvaluationError("Modulo by zero")
         return Integer(left_val % right_val)
     elif operator == "<": return TRUE if left_val < right_val else FALSE
     elif operator == ">": return TRUE if left_val > right_val else FALSE
@@ -233,10 +259,12 @@ def eval_float_infix_expression(operator, left, right):
     elif operator == "-": return Float(left_val - right_val)
     elif operator == "*": return Float(left_val * right_val)
     elif operator == "/": 
-        if right_val == 0: return EvaluationError("Division by zero")
+        if right_val == 0: 
+            return EvaluationError("Division by zero")
         return Float(left_val / right_val)
     elif operator == "%": 
-        if right_val == 0: return EvaluationError("Modulo by zero")
+        if right_val == 0: 
+            return EvaluationError("Modulo by zero")
         return Float(left_val % right_val)
     elif operator == "<": return TRUE if left_val < right_val else FALSE
     elif operator == ">": return TRUE if left_val > right_val else FALSE
@@ -383,7 +411,7 @@ def check_import_permission(exported_value, importer_file, env):
 def _zexus_to_python(value):
     """Convert Zexus objects to Python native types for JSON serialization"""
     debug_log("_zexus_to_python", f"Converting {type(value).__name__}: {value}")
-    
+
     if isinstance(value, Map):
         python_dict = {}
         for key, val in value.pairs.items():
@@ -423,7 +451,7 @@ def _zexus_to_python(value):
 def _python_to_zexus(value):
     """Convert Python native types to Zexus objects"""
     debug_log("_python_to_zexus", f"Converting Python type: {type(value)}: {value}")
-    
+
     if isinstance(value, dict):
         pairs = {}
         for k, v in value.items():
@@ -694,7 +722,60 @@ builtins = {
     "debug_trace": Builtin(builtin_debug_trace, "debug_trace"),
 }
 
-# === ENHANCED MAIN EVAL_NODE FUNCTION WITH STACK TRACES ===
+# === CRITICAL FIX: Enhanced LetStatement Evaluation ===
+def eval_let_statement_fixed(node, env, stack_trace):
+    """FIXED: Evaluate let statement without circular dependencies"""
+    debug_log("eval_let_statement", f"let {node.name.value}")
+    
+    # CRITICAL FIX: Evaluate the value FIRST, before setting the variable
+    value = eval_node(node.value, env, stack_trace)
+    if isinstance(value, (EvaluationError, ObjectEvaluationError)):
+        debug_log("  Let statement value evaluation error", value)
+        return value
+    
+    # THEN set the variable in the environment
+    env.set(node.name.value, value)
+    debug_log("  Let statement successful", f"{node.name.value} = {value}")
+    return NULL
+
+# === CRITICAL FIX: Enhanced Try-Catch Evaluation ===
+def eval_try_catch_statement_fixed(node, env, stack_trace):
+    """FIXED: Evaluate try-catch statement with proper error handling"""
+    debug_log("eval_try_catch_statement", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
+    
+    # Execute try block
+    debug_log("    Executing try block")
+    try:
+        result = eval_node(node.try_block, env, stack_trace)
+        
+        # Check if result is an error object
+        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
+            debug_log("    Try block returned error", result)
+            # Error occurred in try block - execute catch block
+            catch_env = Environment(outer=env)
+            error_var_name = node.error_variable.value if node.error_variable else "error"
+            # Convert error to string for catch block
+            error_value = String(str(result))
+            catch_env.set(error_var_name, error_value)
+            debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+            debug_log("    Executing catch block")
+            return eval_node(node.catch_block, catch_env, stack_trace)
+        else:
+            debug_log("    Try block completed successfully")
+            return result
+            
+    except Exception as e:
+        debug_log(f"    Exception caught in try block: {e}")
+        # Handle unexpected evaluation errors
+        catch_env = Environment(outer=env)
+        error_var_name = node.error_variable.value if node.error_variable else "error"
+        error_value = String(str(e))
+        catch_env.set(error_var_name, error_value)
+        debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+        debug_log("    Executing catch block")
+        return eval_node(node.catch_block, catch_env, stack_trace)
+
+# === ENHANCED MAIN EVAL_NODE FUNCTION WITH CRITICAL FIXES ===
 def eval_node(node, env, stack_trace=None):
     if node is None:
         debug_log("eval_node", "Node is None, returning NULL")
@@ -732,13 +813,9 @@ def eval_node(node, env, stack_trace=None):
                 return val
             return ReturnValue(val)
 
+        # CRITICAL FIX: Use the fixed let statement evaluation
         elif node_type == LetStatement:
-            debug_log("  LetStatement node", f"let {node.name.value}")
-            val = eval_node(node.value, env, stack_trace)
-            if isinstance(val, (EvaluationError, ObjectEvaluationError)):
-                return val
-            env.set(node.name.value, val)
-            return NULL
+            return eval_let_statement_fixed(node, env, stack_trace)
 
         elif node_type == ActionStatement:
             debug_log("  ActionStatement node", f"action {node.name.value}")
@@ -796,26 +873,9 @@ def eval_node(node, env, stack_trace=None):
 
             return result
 
-        # NEW: Try-catch statement
+        # CRITICAL FIX: Use the fixed try-catch evaluation
         elif node_type == TryCatchStatement:
-            debug_log("  TryCatchStatement node", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
-            try:
-                debug_log("    Executing try block")
-                result = eval_node(node.try_block, env, stack_trace)
-                debug_log("    Try block completed successfully")
-                return result
-            except Exception as e:
-                debug_log(f"    Exception caught in try block: {e}")
-                # Create a new environment for the catch block
-                catch_env = Environment(outer=env)
-                # Set the error variable in the catch environment
-                error_var_name = node.error_variable.value if node.error_variable else "error"
-                error_value = String(str(e))  # Convert exception to Zexus String
-                catch_env.set(error_var_name, error_value)
-                debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
-                # Execute the catch block with the error variable set
-                debug_log("    Executing catch block")
-                return eval_node(node.catch_block, catch_env, stack_trace)
+            return eval_try_catch_statement_fixed(node, env, stack_trace)
 
         elif node_type == AssignmentExpression:
             debug_log("  AssignmentExpression node")
