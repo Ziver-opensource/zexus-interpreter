@@ -71,8 +71,37 @@ class Token:
         self.literal = literal
         self.line = line  # ✅ ADD line tracking
         self.column = column  # ✅ ADD column tracking
+        
+        # For backward compatibility with code expecting dict-like tokens
+        self.value = literal  # Alias for literal
 
     def __repr__(self):
         if self.line and self.column:
             return f"Token({self.type}, '{self.literal}', line={self.line}, col={self.column})"
         return f"Token({self.type}, '{self.literal}')"
+    
+    def get(self, key, default=None):
+        """Dict-like get method for backward compatibility"""
+        if hasattr(self, key):
+            return getattr(self, key)
+        return default
+    
+    def __getitem__(self, key):
+        """Allow dict-like access for compatibility"""
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Token has no attribute '{key}'")
+    
+    def __contains__(self, key):
+        """Check if token has attribute"""
+        return hasattr(self, key)
+    
+    def to_dict(self):
+        """Convert token to dictionary for compatibility"""
+        return {
+            'type': self.type,
+            'literal': self.literal,
+            'value': self.literal,
+            'line': self.line,
+            'column': self.column
+        }
