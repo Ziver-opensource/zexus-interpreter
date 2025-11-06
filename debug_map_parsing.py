@@ -1,4 +1,4 @@
-# debug_map_parsing.py
+# debug_map_parsing.py (FIXED)
 import sys
 import os
 
@@ -17,7 +17,15 @@ def debug_map_parsing():
     # Test with advanced parsing
     print("\n--- ADVANCED PARSER ---")
     lexer = Lexer(code)
-    tokens = list(lexer)  # Convert to list to see all tokens
+    
+    # Fixed: Convert tokens properly
+    tokens = []
+    while True:
+        token = lexer.next_token()
+        tokens.append(token)
+        if token.type == 'EOF':
+            break
+            
     print("Tokens:", [(t.type, t.literal) for t in tokens if t.type != 'EOF'])
     
     lexer = Lexer(code)  # Reset lexer
