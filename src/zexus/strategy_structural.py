@@ -1,5 +1,4 @@
-# strategy_structural.py (FIXED VERSION - with better token collection)
-
+# strategy_structural.py (FIXED VERSION - with try-catch parsing)
 from .zexus_token import *
 
 class StructuralAnalyzer:
@@ -94,7 +93,11 @@ class StructuralAnalyzer:
         """Create a block for a standalone statement - FIXED"""
         token = tokens[start_index]
 
-        # Determine statement type
+        # CRITICAL FIX: Check for try-catch first before breaking into statements
+        if token.type == TRY:
+            return self._parse_try_catch_statement(tokens, start_index)
+        
+        # Determine statement type for other statements
         if token.type == LET:
             return self._parse_let_statement(tokens, start_index)
         elif token.type == PRINT:
@@ -105,6 +108,69 @@ class StructuralAnalyzer:
         else:
             # Generic statement
             return self._parse_generic_statement(tokens, start_index)
+
+    def _parse_try_catch_statement(self, tokens, start_index):
+        """Parse a try-catch statement as a single block - CRITICAL FIX"""
+        print(f"🔍 [Structural] Parsing try-catch statement at index {start_index}")
+        
+        statement_tokens = []
+        i = start_index
+        brace_count = 0
+        in_try_block = False
+        in_catch_block = False
+        
+        while i < len(tokens):
+            current_token = tokens[i]
+            statement_tokens.append(current_token)
+            
+            print(f"  📝 Token {i}: {current_token.type} = '{current_token.literal}'")
+            
+            # Track braces to find the complete try-catch structure
+            if current_token.type == LBRACE:
+                brace_count += 1
+            elif current_token.type == RBRACE:
+                brace_count -= 1
+                
+            # Check if we're starting try block
+            if current_token.type == TRY and not in_try_block:
+                in_try_block = True
+                
+            # Check if we're starting catch block  
+            if current_token.type == CATCH and not in_catch_block:
+                in_catch_block = True
+                
+            # End when we've completed both try and catch blocks and braces are balanced
+            if (in_try_block and in_catch_block and brace_count == 0 and 
+                current_token.type == RBRACE and i > start_index):
+                print(f"  🛑 Ending try-catch statement at token {i}: {current_token.type}")
+                break
+                
+            # Also stop if we hit another statement start (error case)
+            if (i > start_index and self._is_statement_start(current_token) and 
+                current_token.type not in [TRY, CATCH]):
+                print(f"  ⚠️ Ending try-catch early at token {i}: {current_token.type}")
+                break
+                
+            i += 1
+
+        block_id = f"block_{self.block_counter}"
+        self.block_counter += 1
+
+        block_info = {
+            'id': block_id,
+            'type': 'statement_block',
+            'subtype': 'try_catch_statement',
+            'start_index': start_index,
+            'end_index': i - 1,
+            'start_token': tokens[start_index],
+            'end_token': tokens[i - 1] if i > 0 else tokens[-1],
+            'tokens': statement_tokens,
+            'nested_blocks': [],
+            'parent': None
+        }
+
+        print(f"  📦 Final try-catch statement tokens: {[t.literal for t in statement_tokens]}")
+        return block_info
 
     def _parse_let_statement(self, tokens, start_index):
         """Parse a let statement into a block - CRITICAL FIX"""
