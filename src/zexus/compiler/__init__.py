@@ -53,3 +53,14 @@ class ZexusCompiler:
     def get_errors(self):
         """Get formatted error messages with line numbers"""
         return self.errors
+
+# --- Compatibility exports ----------------------------------------------------
+# Provide the common name `Parser` for external code that expects it.
+Parser = ProductionParser
+
+# Expose interpreter builtins to the compiler package for semantic passes.
+# Fall back to an empty dict if the evaluator cannot be imported (avoids import cycles).
+try:
+    from ..evaluator import builtins as BUILTINS
+except Exception:
+    BUILTINS = {}

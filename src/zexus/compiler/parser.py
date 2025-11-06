@@ -600,3 +600,8 @@ class ProductionParser:
 
     def cur_precedence(self):
         return precedences.get(self.cur_token.type, LOWEST)
+
+# --- Compatibility alias ----------------------------------------------------
+# Provide the common name `Parser` for code that imports the compiler parser
+# using older/alternate names.
+Parser = ProductionParser
