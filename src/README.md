@@ -286,6 +286,577 @@ contract Token {
 }
 ```
 
+
+## Keywords Reference
+
+### Core Language Keywords
+
+#### `let` - Variable Declaration
+**Purpose**: Declare and initialize variables
+```zexus
+let name = "Zexus"           // String variable
+let count = 42               // Integer  
+let price = 99.99            // Float
+let active = true            // Boolean
+let numbers = [1, 2, 3]      // List
+let user = {name: "John"}    // Map/Object
+```
+
+action - Function Definition
+
+Purpose: Define reusable code blocks (functions)
+
+```zexus
+// Basic function
+action greet(name) {
+    return "Hello " + name
+}
+
+// With return type
+action add(a: integer, b: integer) -> integer {
+    return a + b
+}
+
+// Function expression
+let multiply = action(x, y) { return x * y }
+```
+
+async action - Asynchronous Functions
+
+Purpose: Define functions that can perform async operations
+
+```zexus
+action async fetch_data(url) {
+    let response = await http_get(url)
+    return parse_json(response)
+}
+
+action async process_transaction(tx) {
+    let receipt = await send_transaction(tx)
+    await wait_for_confirmation(receipt)
+    return receipt
+}
+```
+
+return - Function Return
+
+Purpose: Return values from functions
+
+```zexus
+action calculate(x) {
+    if x > 10 {
+        return x * 2
+    }
+    return x + 1
+}
+```
+
+if/else - Conditional Logic
+
+Purpose: Control program flow based on conditions
+
+```zexus
+if temperature > 30 {
+    print("It's hot!")
+} else if temperature < 10 {
+    print("It's cold!")
+} else {
+    print("Nice weather!")
+}
+```
+
+for each/in - Loop Iteration
+
+Purpose: Iterate over collections
+
+```zexus
+let numbers = [1, 2, 3, 4, 5]
+
+// Iterate list
+for each num in numbers {
+    print(num * 2)
+}
+
+// Iterate map
+let user = {name: "John", age: 30}
+for each key in user {
+    print(key + ": " + string(user[key]))
+}
+```
+
+while - Conditional Looping
+
+Purpose: Repeat while condition is true
+
+```zexus
+let count = 0
+while count < 5 {
+    print("Count: " + string(count))
+    count = count + 1
+}
+```
+
+try/catch - Error Handling
+
+Purpose: Handle runtime errors gracefully
+
+```zexus
+try {
+    let result = risky_operation()
+    print("Success: " + string(result))
+} catch(error) {
+    print("Error occurred: " + string(error))
+    // Handle error or recover
+}
+```
+
+Type System Keywords
+
+enum - Enumerated Types
+
+Purpose: Define a set of named constants
+
+```zexus
+enum Status {
+    PENDING,
+    PROCESSING, 
+    COMPLETED,
+    FAILED
+}
+
+enum ChainType {
+    ZIVER,
+    ETHEREUM,
+    BSC,
+    TON
+}
+
+// Usage
+let tx_status = Status.PENDING
+let chain = ChainType.ETHEREUM
+```
+
+protocol - Interface Definitions
+
+Purpose: Define method contracts that types must implement
+
+```zexus
+protocol Wallet {
+    action transfer(to: Address, amount: integer) -> boolean
+    action get_balance() -> integer
+    action get_address() -> Address
+}
+
+protocol Storage {
+    action get(key: string) -> any
+    action set(key: string, value: any) -> boolean
+    action delete(key: string) -> boolean
+}
+```
+
+contract - Smart Contracts
+
+Purpose: Define blockchain smart contracts with persistent state
+
+```zexus
+contract Token {
+    persistent storage balances: Map<Address, integer>
+    persistent storage owner: Address
+    
+    action transfer(to: Address, amount: integer) -> boolean {
+        require(balances[msg.sender] >= amount, "Insufficient balance")
+        balances[msg.sender] = balances[msg.sender] - amount
+        balances[to] = balances.get(to, 0) + amount
+        return true
+    }
+}
+```
+
+Event System Keywords
+
+event - Event Definitions
+
+Purpose: Define event structures for reactive programming
+
+```zexus
+event UserRegistered {
+    user_id: string,
+    timestamp: integer,
+    plan: string
+}
+
+event TransactionCompleted {
+    tx_hash: string,
+    from: Address,
+    to: Address,
+    amount: integer,
+    block: integer
+}
+```
+
+emit - Event Emission
+
+Purpose: Trigger events with data
+
+```zexus
+action register_user(user_data) {
+    // ... registration logic
+    emit UserRegistered {
+        user_id: user_data.id,
+        timestamp: datetime_now().timestamp(),
+        plan: user_data.plan
+    }
+}
+```
+
+register_event - Event Handlers
+
+Purpose: Register functions to handle events
+
+```zexus
+register_event("user_registered", action(event) {
+    print("New user: " + event.user_id)
+    send_welcome_email(event.user_id)
+})
+
+register_event("tx_completed", action(event) {
+    update_balances(event.from, event.to, event.amount)
+    notify_parties(event)
+})
+```
+
+Module System Keywords
+
+use - Module Imports
+
+Purpose: Import external modules and libraries
+
+```zexus
+use "crypto" as crypto          // Cryptography functions
+use "network" as net            // Networking utilities  
+use "blockchain" as chain       // Blockchain operations
+use "math" as math              // Math functions
+
+// Usage
+let hash = crypto.sha256("data")
+let peers = net.get_peers()
+let block = chain.get_latest_block()
+```
+
+external - External Function Declarations
+
+Purpose: Declare functions implemented outside Zexus
+
+```zexus
+external action sha256(data: string) -> string from "crypto"
+external action verify_signature from "security"
+external action random_bytes(count: integer) -> list from "crypto"
+```
+
+Concurrency Keywords
+
+await - Asynchronous Waiting
+
+Purpose: Wait for async operations to complete
+
+```zexus
+action async process_data() {
+    let data = await fetch_from_api()        // Wait for HTTP
+    let processed = await process_large_data(data)  // Wait for computation
+    let stored = await save_to_database(processed)  // Wait for I/O
+    return stored
+}
+```
+
+spawn - Concurrent Task Creation
+
+Purpose: Launch concurrent operations (when used with builtins)
+
+```zexus
+action async process_multiple_files() {
+    let files = ["file1.txt", "file2.txt", "file3.txt"]
+    
+    // Process files concurrently
+    let tasks = []
+    for each file in files {
+        let task = spawn process_file(file)  // Start concurrent task
+        tasks.push(task)
+    }
+    
+    // Wait for all to complete
+    for each task in tasks {
+        let result = await task
+        print("Processed: " + string(result))
+    }
+}
+```
+
+Renderer System Keywords
+
+Screen - UI Screen Definitions
+
+Purpose: Define application screens/windows
+
+```zexus
+Screen login_screen {
+    height: 20,
+    width: 60,
+    title: "User Login",
+    theme: "dark_theme",
+    border: true
+}
+
+Screen dashboard {
+    height: 25,
+    width: 80,
+    title: "Blockchain Dashboard",
+    background: "gradient(blue, purple)"
+}
+```
+
+Component - Reusable UI Components
+
+Purpose: Define reusable interface elements
+
+```zexus
+Component primary_button {
+    type: "button",
+    text: "Click Me",
+    color: "blue",
+    width: 15,
+    height: 3,
+    border: "rounded"
+}
+
+Component text_input {
+    type: "textbox", 
+    placeholder: "Enter text...",
+    width: 30,
+    height: 3,
+    background: "white"
+}
+```
+
+Theme - Color Theme Definitions
+
+Purpose: Define consistent color schemes
+
+```zexus
+Theme dark_theme {
+    primary: "navy_blue",
+    accent: "electric_blue",
+    background: "dark_gray",
+    text: "white",
+    success: "green",
+    warning: "orange",
+    error: "red"
+}
+
+Theme light_theme {
+    primary: "sky_blue",
+    accent: "royal_blue", 
+    background: "white",
+    text: "black",
+    success: "forest_green",
+    warning: "gold",
+    error: "crimson"
+}
+```
+
+Blockchain-Specific Keywords
+
+persistent storage - Contract State
+
+Purpose: Declare persistent storage in smart contracts
+
+```zexus
+contract Bank {
+    persistent storage balances: Map<Address, integer>
+    persistent storage total_deposits: integer
+    persistent storage owner: Address
+    persistent storage interest_rate: float
+}
+```
+
+require - Contract Conditions
+
+Purpose: Enforce conditions in smart contracts
+
+```zexus
+action withdraw(amount: integer) {
+    require(amount > 0, "Amount must be positive")
+    require(balances[msg.sender] >= amount, "Insufficient funds")
+    require(contract_active, "Contract is paused")
+    
+    balances[msg.sender] = balances[msg.sender] - amount
+    return true
+}
+```
+
+Utility Keywords
+
+print - Output to Console
+
+Purpose: Display values to the console
+
+```zexus
+print("Hello World")                    // String
+print(42)                              // Number
+print([1, 2, 3])                       // List
+print({name: "John", age: 30})         // Map
+print("Value: " + string(some_value))  // Concatenation
+```
+
+debug - Debugging Output
+
+Purpose: Debugging and development output
+
+```zexus
+debug "Starting process..."           // Simple debug message
+debug "User data:", user_data         // Debug with data
+debug_trace("Function entry")         // Stack tracing
+```
+
+export - Module Exports
+
+Purpose: Make functions/variables available to other modules
+
+```zexus
+export action public_function() {     // Export function
+    return "accessible from other modules"
+}
+
+export let API_KEY = "12345"          // Export variable
+
+action private_helper() {             // Not exported (private)
+    return "internal use only"
+}
+```
+
+Special Types and Values
+
+Built-in Constants
+
+```zexus
+let n = null           // Null value
+let t = true           // Boolean true
+let f = false          // Boolean false
+
+// Special values in contracts
+let sender = msg.sender     // Transaction sender
+let value = msg.value       // Transaction value  
+let timestamp = block.time  // Current block timestamp
+```
+
+Type Annotations
+
+```zexus
+let name: string = "John"           // String type
+let age: integer = 30               // Integer type
+let price: float = 19.99            // Float type
+let active: boolean = true          // Boolean type
+let scores: list = [95, 87, 92]     // List type
+let user: map = {name: "John"}      // Map type
+let addr: Address = "0x123..."      // Address type
+```
+
+Keyword Usage Patterns
+
+Smart Contract Pattern
+
+```zexus
+contract TokenContract {
+    persistent storage balances: Map<Address, integer>
+    persistent storage owner: Address
+    
+    action transfer(to: Address, amount: integer) -> boolean {
+        require(amount > 0, "Invalid amount")
+        require(balances[msg.sender] >= amount, "Insufficient balance")
+        
+        balances[msg.sender] = balances[msg.sender] - amount
+        balances[to] = balances.get(to, 0) + amount
+        
+        emit Transfer {
+            from: msg.sender,
+            to: to, 
+            amount: amount,
+            timestamp: block.timestamp
+        }
+        
+        return true
+    }
+}
+```
+
+Async Event Handler Pattern
+
+```zexus
+action async process_transaction(tx) {
+    try {
+        let receipt = await send_transaction(tx)
+        
+        emit TransactionSent {
+            tx_hash: receipt.hash,
+            status: "pending"
+        }
+        
+        let confirmation = await wait_for_confirmation(receipt.hash)
+        
+        emit TransactionConfirmed {
+            tx_hash: receipt.hash, 
+            block: confirmation.block,
+            status: "confirmed"
+        }
+        
+    } catch(error) {
+        emit TransactionFailed {
+            tx_hash: tx.hash,
+            error: string(error)
+        }
+    }
+}
+```
+
+UI Component Pattern
+
+```zexus
+Theme app_theme {
+    primary: "indigo",
+    accent: "amber",
+    background: "slate",
+    text: "white"
+}
+
+Screen main_screen {
+    width: 100,
+    height: 30,
+    theme: "app_theme"
+}
+
+Component wallet_display {
+    type: "panel",
+    title: "Wallet Balance",
+    width: 40,
+    height: 10
+}
+
+action async update_interface() {
+    set_theme("app_theme")
+    define_screen("main_screen")
+    define_component("wallet_display")
+    add_to_screen("main_screen", "wallet_display")
+    
+    while true {
+        let balance = await get_wallet_balance()
+        // Update display with current balance
+        let output = render_screen("main_screen") 
+        print(output)
+        await sleep(2)  // Update every 2 seconds
+    }
+}
+
+```
+
 ---
 
 Virtual Machine Architecture (NEW)
