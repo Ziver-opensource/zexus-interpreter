@@ -73,9 +73,15 @@ class ProductionParser:
         """Clean, efficient program parsing"""
         program = Program()
         while not self.cur_token_is(EOF):
+            # Tolerant: skip stray semicolons between statements
+            if self.cur_token_is(SEMICOLON):
+                self.next_token()
+                continue
+
             stmt = self.parse_statement()
             if stmt:
                 program.statements.append(stmt)
+
             self.next_token()
         return program
 
@@ -140,9 +146,6 @@ class ProductionParser:
 
         # Handle empty object case: {}
         if self.cur_token_is(RBRACE):
-            # consume closing brace
-            # keep parser at RBRACE consumed state to follow callers' expectations
-            # i.e., do not extra next_token here; callers often expect the map literal to consume the closing brace
             return MapLiteral(pairs)
 
         # Parse key-value pairs
@@ -168,10 +171,14 @@ class ProductionParser:
 
             pairs.append((key, value))
 
-            # If comma present, consume it and advance to next key (we leave cur_token at comma for next loop handling)
-            if self.peek_token_is(COMMA):
-                self.next_token()  # move to comma
-                self.next_token()  # advance past comma to next key (or closing brace)
+            # Accept comma OR semicolon as separators; tolerate trailing separators
+            if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                self.next_token()  # move to separator
+                # advance to next token after separator (or closing brace)
+                if self.peek_token_is(RBRACE):
+                    self.next_token()  # move to RBRACE and break next loop iteration
+                    break
+                self.next_token()
                 continue
 
             # If closing brace is the next token, consume it and finish
@@ -353,24 +360,40 @@ class ProductionParser:
 
     def parse_block(self):
         block = BlockStatement()
-        
+
         # Handle different block styles
         if self.cur_token_is(LBRACE):
             self.next_token()  # Skip {
-            
+
             while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+                # Skip stray semicolons between statements inside a block
+                if self.cur_token_is(SEMICOLON):
+                    self.next_token()
+                    continue
+
                 stmt = self.parse_statement()
                 if stmt:
                     block.statements.append(stmt)
-                self.next_token()
-                
+
+                # After parsing a statement, consume any trailing semicolons so they don't become unexpected tokens
+                while self.peek_token_is(SEMICOLON):
+                    self.next_token()  # move to semicolon
+                    self.next_token()  # move past semicolon
+
+                # Advance to next token if parser hasn't advanced to EOF or closing brace
+                if not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+                    self.next_token()
+
             if self.cur_token_is(EOF):
                 self.errors.append("Unclosed block (reached EOF)")
         else:
             # Single statement block
+            # Tolerant: allow a trailing semicolon after single statement
             stmt = self.parse_statement()
             if stmt:
                 block.statements.append(stmt)
+                if self.peek_token_is(SEMICOLON):
+                    self.next_token()  # consume semicolon
 
         return block
 
@@ -524,33 +547,62 @@ class ProductionParser:
 
     # New: try-catch parsing
     def parse_try_catch_statement(self):
-        """Basic try-catch parsing for production parser"""
+        """Basic try-catch parsing for production parser (more tolerant)"""
         # current token is TRY
         self.next_token()  # advance to what should be LBRACE or block indicator
         # parse try block (brace block preferred)
         try_block = self.parse_block()
+
         # Expect a CATCH
         if not self.cur_token_is(CATCH) and not self.peek_token_is(CATCH):
             self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected 'catch' after try block")
             return None
+
         # ensure we're at CATCH
         if not self.cur_token_is(CATCH):
             self.next_token()
-        # extract optional catch variable
+
+        # extract optional catch variable (tolerant handling)
         error_var = Identifier("error")
+
+        # If next is parentheses, accept nested parentheses and find IDENT inside
         if self.peek_token_is(LPAREN):
-            self.next_token()  # move to LPAREN
-            self.next_token()  # inside (
+            # move to first LPAREN
+            self.next_token()  # now at LPAREN
+            # advance inside parentheses, skip any extra '(' until IDENT or RPAREN encountered
+            self.next_token()
+            # Skip nested LPAREN until identifier or RPAREN
+            while self.cur_token_is(LPAREN) and not self.cur_token_is(EOF):
+                self.next_token()
+
+            # If ident found, use it
             if self.cur_token_is(IDENT):
                 error_var = Identifier(self.cur_token.literal)
-            if not self.expect_peek(RPAREN):
-                return None
+                # consume remaining RPAREN tokens (tolerant)
+                while self.peek_token_is(RPAREN):
+                    self.next_token()
+            else:
+                # No identifier inside parens; default to "error" and try to position at next relevant token
+                pass
+
+        # catch <ident> style (no parens)
         elif self.peek_token_is(IDENT):
             self.next_token()
             if self.cur_token_is(IDENT):
                 error_var = Identifier(self.cur_token.literal)
+
+        # Move to the token that starts the catch block; tolerate optional tokens
+        # If current token is RPAREN, advance one to reach the following token (often LBRACE)
+        if self.cur_token_is(RPAREN) and not self.peek_token_is(EOF):
+            self.next_token()
+
+        # Ensure we're positioned to parse the catch block
+        if not (self.cur_token_is(LBRACE) or self.peek_token_is(LBRACE)):
+            # If next token is LBRACE, advance to it
+            if self.peek_token_is(LBRACE):
+                self.next_token()
+
         # parse catch block
-        self.next_token()
         catch_block = self.parse_block()
         return TryCatchStatement(try_block=try_block, error_variable=error_var, catch_block=catch_block)
 
