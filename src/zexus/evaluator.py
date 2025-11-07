@@ -719,39 +719,252 @@ def builtin_filter(*args):
         return EvaluationError("filter() takes 2 arguments (array, lambda)")
     return array_filter(args[0], args[1])
 
-# Enhanced builtins dictionary with new Phase 1 functions
-builtins = {
-    # Existing builtins
-    "len": Builtin(builtin_len, "len"),
-    "first": Builtin(builtin_first, "first"),
-    "rest": Builtin(builtin_rest, "rest"),
-    "push": Builtin(builtin_push, "push"),
-    "string": Builtin(builtin_string, "string"),
-    "reduce": Builtin(builtin_reduce, "reduce"),
-    "map": Builtin(builtin_map, "map"),
-    "filter": Builtin(builtin_filter, "filter"),
+# --- RENDERER REGISTRY & HELPERS ---------------------------------------
+# Try to use the real renderer backend if available, otherwise keep a safe registry.
+try:
+	from renderer import backend as _BACKEND
+	_BACKEND_AVAILABLE = True
+except Exception:
+	_BACKEND_AVAILABLE = False
+	_BACKEND = None
 
-    # NEW: Phase 1 builtins
-    "datetime_now": Builtin(builtin_datetime_now, "datetime_now"),
-    "timestamp": Builtin(builtin_timestamp, "timestamp"),
-    "random": Builtin(builtin_math_random, "random"),
-    "to_hex": Builtin(builtin_to_hex, "to_hex"),
-    "from_hex": Builtin(builtin_from_hex, "from_hex"),
-    "sqrt": Builtin(builtin_sqrt, "sqrt"),
-
-    # File I/O builtins
-    "file_read_text": Builtin(builtin_file_read_text, "file_read_text"),
-    "file_write_text": Builtin(builtin_file_write_text, "file_write_text"),
-    "file_exists": Builtin(builtin_file_exists, "file_exists"),
-    "file_read_json": Builtin(builtin_file_read_json, "file_read_json"),
-    "file_write_json": Builtin(builtin_file_write_json, "file_write_json"),
-    "file_append": Builtin(builtin_file_append, "file_append"),
-    "file_list_dir": Builtin(builtin_file_list_dir, "file_list_dir"),
-
-    # Debug builtins
-    "debug_log": Builtin(builtin_debug_log, "debug_log"),
-    "debug_trace": Builtin(builtin_debug_trace, "debug_trace"),
+# Local fallback registry and palette (used only if backend unavailable)
+RENDER_REGISTRY = {
+	'screens': {},
+	'components': {},
+	'themes': {},
+	'canvases': {},
+	'current_theme': None
 }
+
+# Helper converters: Zexus object -> Python native/simple printable
+def _to_str(obj):
+	if isinstance(obj, String):
+		return obj.value
+	if isinstance(obj, (Integer, Float)):
+		return str(obj.value)
+	return getattr(obj, 'inspect', lambda: str(obj))()
+
+def _to_python(obj):
+	"""Convert Map/List/Zexus primitives into Python primitives for registry storage."""
+	if obj is None:
+		return None
+	if isinstance(obj, Map):
+		py = {}
+		for k, v in obj.pairs.items():
+			key = k.inspect() if hasattr(k, 'inspect') else str(k)
+			py[key] = _to_python(v)
+		return py
+	if isinstance(obj, List):
+		return [_to_python(e) for e in obj.elements]
+	if isinstance(obj, String):
+		return obj.value
+	if isinstance(obj, Integer):
+		return obj.value
+	if isinstance(obj, Float):
+		return obj.value
+	if obj == NULL:
+		return None
+	return getattr(obj, 'inspect', lambda: str(obj))()
+
+# --- RENDERER BUILTIN IMPLEMENTATIONS (delegating to backend if present) ---
+
+def builtin_mix(*args):
+	"""mix(colorA, colorB, ratio) -> String"""
+	if len(args) != 3:
+		return EvaluationError("mix() expects 3 arguments (colorA, colorB, ratio)")
+	a, b, ratio = args
+	a_name = _to_str(a); b_name = _to_str(b)
+	try:
+		ratio_val = float(ratio.value) if isinstance(ratio, (Integer, Float)) else float(str(ratio))
+	except Exception:
+		ratio_val = 0.5
+
+	if _BACKEND_AVAILABLE:
+		try:
+			res = _BACKEND.mix(a_name, b_name, ratio_val)
+			return String(str(res))
+		except Exception as e:
+			return String(f"mix({a_name},{b_name},{ratio_val})")
+	# fallback: store mix representation locally
+	return String(f"mix({a_name},{b_name},{ratio_val})")
+
+def builtin_define_screen(*args):
+	if len(args) < 1:
+		return EvaluationError("define_screen() requires at least a name")
+	name = _to_str(args[0])
+	props = _to_python(args[1]) if len(args) > 1 else {}
+	if _BACKEND_AVAILABLE:
+		try:
+			_BACKEND.define_screen(name, props)
+			return NULL
+		except Exception as e:
+			return EvaluationError(str(e))
+	# fallback
+	RENDER_REGISTRY['screens'].setdefault(name, {'properties': props, 'components': [], 'theme': None})
+	return NULL
+
+def builtin_define_component(*args):
+	if len(args) < 1:
+		return EvaluationError("define_component() requires at least a name")
+	name = _to_str(args[0]); props = _to_python(args[1]) if len(args) > 1 else {}
+	if _BACKEND_AVAILABLE:
+		try:
+			_BACKEND.define_component(name, props)
+			return NULL
+		except Exception as e:
+			return EvaluationError(str(e))
+	RENDER_REGISTRY['components'][name] = props
+	return NULL
+
+def builtin_add_to_screen(*args):
+	if len(args) != 2:
+		return EvaluationError("add_to_screen() requires (screen_name, component_name)")
+	screen = _to_str(args[0]); comp = _to_str(args[1])
+	if _BACKEND_AVAILABLE:
+		try:
+			_BACKEND.add_to_screen(screen, comp)
+			return NULL
+		except Exception as e:
+			return EvaluationError(str(e))
+	if screen not in RENDER_REGISTRY['screens']:
+		return EvaluationError(f"Screen '{screen}' not found")
+	RENDER_REGISTRY['screens'][screen]['components'].append(comp)
+	return NULL
+
+def builtin_render_screen(*args):
+	if len(args) != 1:
+		return EvaluationError("render_screen() requires exactly 1 argument")
+	name = _to_str(args[0])
+	if _BACKEND_AVAILABLE:
+		try:
+			out = _BACKEND.render_screen(name)
+			return String(str(out))
+		except Exception as e:
+			return String(f"<render error: {str(e)}>")
+	screen = RENDER_REGISTRY['screens'].get(name)
+	if not screen:
+		return String(f"<missing screen: {name}>")
+	props = screen.get('properties', {}); comps = screen.get('components', [])
+	theme = screen.get('theme') or RENDER_REGISTRY.get('current_theme')
+	return String(f"Screen:{name} props={props} components={comps} theme={theme}")
+
+def builtin_set_theme(*args):
+	if len(args) == 1:
+		theme_name = _to_str(args[0])
+		if _BACKEND_AVAILABLE:
+			try:
+				_BACKEND.set_theme(theme_name)
+				return NULL
+			except Exception as e:
+				return EvaluationError(str(e))
+		RENDER_REGISTRY['current_theme'] = theme_name
+		return NULL
+	if len(args) == 2:
+		target = _to_str(args[0]); theme_name = _to_str(args[1])
+		if _BACKEND_AVAILABLE:
+			try:
+				_BACKEND.set_theme(target, theme_name)
+				return NULL
+			except Exception as e:
+				return EvaluationError(str(e))
+		if target in RENDER_REGISTRY['screens']:
+			RENDER_REGISTRY['screens'][target]['theme'] = theme_name
+			return NULL
+		RENDER_REGISTRY['themes'].setdefault(theme_name, {})
+		return NULL
+	return EvaluationError("set_theme() requires 1 (theme) or 2 (target,theme) args")
+
+def builtin_create_canvas(*args):
+	if len(args) != 2:
+		return EvaluationError("create_canvas(width, height)")
+	try:
+		wid = int(args[0].value) if isinstance(args[0], Integer) else int(str(args[0]))
+		hei = int(args[1].value) if isinstance(args[1], Integer) else int(str(args[1]))
+	except Exception:
+		return EvaluationError("Invalid numeric arguments to create_canvas()")
+	if _BACKEND_AVAILABLE:
+		try:
+			cid = _BACKEND.create_canvas(wid, hei)
+			return String(str(cid))
+		except Exception as e:
+			return EvaluationError(str(e))
+	cid = f"canvas_{len(RENDER_REGISTRY['canvases'])+1}"
+	RENDER_REGISTRY['canvases'][cid] = {'width': wid, 'height': hei, 'draw_ops': []}
+	return String(cid)
+
+def builtin_draw_line(*args):
+	if len(args) != 5:
+		return EvaluationError("draw_line(canvas_id,x1,y1,x2,y2)")
+	cid = _to_str(args[0])
+	try:
+		coords = [int(a.value) if isinstance(a, Integer) else int(str(a)) for a in args[1:]]
+	except Exception:
+		return EvaluationError("Invalid coordinates in draw_line()")
+	if _BACKEND_AVAILABLE:
+		try:
+			_BACKEND.draw_line(cid, *coords)
+			return NULL
+		except Exception as e:
+			return EvaluationError(str(e))
+	canvas = RENDER_REGISTRY['canvases'].get(cid)
+	if not canvas:
+		return EvaluationError(f"Canvas {cid} not found")
+	canvas['draw_ops'].append(('line', coords))
+	return NULL
+
+def builtin_draw_text(*args):
+	if len(args) != 4:
+		return EvaluationError("draw_text(canvas_id,x,y,text)")
+	cid = _to_str(args[0])
+	try:
+		x = int(args[1].value) if isinstance(args[1], Integer) else int(str(args[1]))
+		y = int(args[2].value) if isinstance(args[2], Integer) else int(str(args[2]))
+	except Exception:
+		return EvaluationError("Invalid coordinates in draw_text()")
+	text = _to_str(args[3])
+	if _BACKEND_AVAILABLE:
+		try:
+			_BACKEND.draw_text(cid, x, y, text)
+			return NULL
+		except Exception as e:
+			return EvaluationError(str(e))
+	canvas = RENDER_REGISTRY['canvases'].get(cid)
+	if not canvas:
+		return EvaluationError(f"Canvas {cid} not found")
+	canvas['draw_ops'].append(('text', (x, y, text)))
+	return NULL
+
+# --- REGISTER RENDERER BUILTINS INTO builtins DICTIONARY ---------------------
+# (leave the existing update logic in place; this code will add entries if `builtins` exists)
+try:
+	builtins.update({
+		"mix": Builtin(builtin_mix, "mix"),
+		"define_screen": Builtin(builtin_define_screen, "define_screen"),
+		"define_component": Builtin(builtin_define_component, "define_component"),
+		"add_to_screen": Builtin(builtin_add_to_screen, "add_to_screen"),
+		"render_screen": Builtin(builtin_render_screen, "render_screen"),
+		"set_theme": Builtin(builtin_set_theme, "set_theme"),
+		"create_canvas": Builtin(builtin_create_canvas, "create_canvas"),
+		"draw_line": Builtin(builtin_draw_line, "draw_line"),
+		"draw_text": Builtin(builtin_draw_text, "draw_text"),
+	})
+except NameError:
+	# keep the pending dict as before; other code will merge later
+	try:
+		__RENDERER_BUILTINS_PENDING = {
+			"mix": ("builtin", builtin_mix),
+			"define_screen": ("builtin", builtin_define_screen),
+			"define_component": ("builtin", builtin_define_component),
+			"add_to_screen": ("builtin", builtin_add_to_screen),
+			"render_screen": ("builtin", builtin_render_screen),
+			"set_theme": ("builtin", builtin_set_theme),
+			"create_canvas": ("builtin", builtin_create_canvas),
+			"draw_line": ("builtin", builtin_draw_line),
+			"draw_text": ("builtin", builtin_draw_text),
+		}
+	except Exception:
+		pass
 
 # === CRITICAL FIX: Enhanced LetStatement Evaluation ===
 def eval_let_statement_fixed(node, env, stack_trace):

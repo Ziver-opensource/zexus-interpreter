@@ -107,9 +107,16 @@ class ProductionParser:
             elif self.cur_token_is(EXPORT):
                 return self.parse_export_statement()
             elif self.cur_token_is(TRY):
-                return self.parse_try_catch_statement()             # <-- new
+                return self.parse_try_catch_statement()
             elif self.cur_token_is(EXTERNAL):
-                return self.parse_external_declaration()            # <-- new
+                return self.parse_external_declaration()
+            # NEW: renderer declarations
+            elif self.cur_token_is(SCREEN):
+                return self.parse_screen_statement()
+            elif self.cur_token_is(COMPONENT):
+                return self.parse_component_statement()
+            elif self.cur_token_is(THEME):
+                return self.parse_theme_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -628,6 +635,31 @@ class ProductionParser:
             return None
         module_path = self.cur_token.literal
         return ExternalDeclaration(name=name, parameters=parameters, module_path=module_path)
+
+    # NEW: screen/component/theme parsing methods
+    def parse_screen_statement(self):
+        """Parse: Screen <name> { ... }"""
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
+        body = self.parse_block()
+        return ScreenStatement(name=name, body=body)
+
+    def parse_component_statement(self):
+        """Parse: Component <name> { ... }"""
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
+        body = self.parse_block()
+        return ComponentStatement(name=name, properties=body)
+
+    def parse_theme_statement(self):
+        """Parse: Theme <name> { ... }"""
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
+        body = self.parse_block()
+        return ThemeStatement(name=name, properties=body)
 
     # Token utilities
     def next_token(self):

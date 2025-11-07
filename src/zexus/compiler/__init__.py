@@ -34,6 +34,7 @@ class ZexusCompiler:
 		self.ast = None
 		self.bytecode = None
 		self.errors = []
+		self.analyzer = None  # store SemanticAnalyzer instance after compile
 		
 	def compile(self):
 		"""Full compilation pipeline with enhanced error reporting (lazy module imports)"""
@@ -79,10 +80,10 @@ class ZexusCompiler:
 				
 			# Phase 3: Semantic Analysis
 			analyzer = SemanticAnalyzer()
+			self.analyzer = analyzer
 
-			# Best-effort: inject BUILTINS into analyzer environment so compiler can resolve builtins like 'string'
+			# Best-effort: inject BUILTINS into analyzer environment
 			try:
-				# If analyzer exposes an `environment` attribute which supports `set(name, value)`, use it.
 				if BUILTINS:
 					if hasattr(analyzer, "register_builtins") and callable(getattr(analyzer, "register_builtins")):
 						analyzer.register_builtins(BUILTINS)
@@ -99,9 +100,7 @@ class ZexusCompiler:
 						elif isinstance(env, dict):
 							for k, v in BUILTINS.items():
 								env.setdefault(k, v)
-					# otherwise try class-level hook
 			except Exception:
-				# Do not fail compilation for builtin injection issues; semantic analyzer may handle builtins itself.
 				pass
 
 			semantic_errors = analyzer.analyze(self.ast)
@@ -120,10 +119,40 @@ class ZexusCompiler:
 		except Exception as e:
 			self.errors.append(f"Compilation error: {str(e)}")
 			return None
-	
-	def get_errors(self):
-		"""Get formatted error messages with line numbers"""
-		return self.errors
+
+	# NEW: run compiled bytecode using small VM
+	def run_bytecode(self, debug=False):
+		"""Execute the compiled bytecode ops using the small VM.
+		Requires compile() to have been called successfully (self.bytecode set).
+		Returns VM execution result or None."""
+		if not self.bytecode:
+			self.errors.append("No bytecode to run")
+			return None
+		try:
+			# Lazy import VM to avoid cycles
+			from ..vm.vm import VM
+		except Exception as e:
+			self.errors.append(f"VM import error: {e}")
+			return None
+
+		# Provide builtins mapping to VM if analyzer has environment dict or via compiler BUILTINS
+		builtins_map = {}
+		if self.analyzer and hasattr(self.analyzer, "environment") and isinstance(self.analyzer.environment, dict):
+			builtins_map = {k: v for k, v in self.analyzer.environment.items() if k in BUILTINS}
+		else:
+			# fallback to compiler.BUILTINS (may be dict)
+			try:
+				builtins_map = BUILTINS if isinstance(BUILTINS, dict) else {}
+			except Exception:
+				builtins_map = {}
+
+		# environment mapping passed to VM (start from analyzer.environment if dict)
+		vm_env = {}
+		if self.analyzer and hasattr(self.analyzer, "environment") and isinstance(self.analyzer.environment, dict):
+			vm_env.update(self.analyzer.environment)
+
+		vm = VM(builtins=builtins_map, env=vm_env)
+		return vm.execute(self.bytecode, debug=debug)
 
 # Provide Parser alias for external code expecting it (best-effort)
 try:
@@ -132,3 +161,5 @@ try:
 except Exception:
 	# keep existing Parser (possibly None) and avoid raising on import
 	pass
+
+Parser = Parser or None

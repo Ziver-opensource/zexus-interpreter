@@ -140,17 +140,39 @@ class UseStatement(Statement):
     def __repr__(self):
         return f"UseStatement('{self.file_path}')"
 
-class ExportStatement(Statement):
-    def __init__(self, name, allowed_files=None, permission=None):
+# NEW: Compiler-side Screen/Component/Theme nodes
+class ScreenStatement(Statement):
+    def __init__(self, name, body):
         self.name = name
-        self.allowed_files = allowed_files or []
-        self.permission = permission or "read_only"
+        self.body = body
 
     def token_literal(self):
-        return "export"
+        return "screen"
 
     def __repr__(self):
-        return f"ExportStatement({self.name})"
+        return f"ScreenStatement({self.name})"
+
+class ComponentStatement(Statement):
+    def __init__(self, name, properties):
+        self.name = name
+        self.properties = properties
+
+    def token_literal(self):
+        return "component"
+
+    def __repr__(self):
+        return f"ComponentStatement({self.name})"
+
+class ThemeStatement(Statement):
+    def __init__(self, name, properties):
+        self.name = name
+        self.properties = properties
+
+    def token_literal(self):
+        return "theme"
+
+    def __repr__(self):
+        return f"ThemeStatement({self.name})"
 
 # NEW: TryCatchStatement for compiler AST (matches interpreter node)
 class TryCatchStatement(Statement):

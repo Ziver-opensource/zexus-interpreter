@@ -150,3 +150,119 @@ class BytecodeGenerator:
             if isinstance(expr.function, Identifier):
                 func_index = self.bytecode.add_constant(expr.function.value)
                 self.bytecode.add_instruction('CALL', func_index)
+                
+"""
+Simple Bytecode Generator for Zexus compiler frontend.
+
+This generator emits a linear list of ops (tuples) that represent
+high-level actions. The VM or further stages can convert ops into
+real instructions. The format is intentionally simple:
+
+- ("DEFINE_SCREEN", name, properties_dict)
+- ("DEFINE_COMPONENT", name, properties_dict)
+- ("DEFINE_THEME", name, properties_dict)
+- ("CALL_BUILTIN", name, [arg1, arg2, ...])
+- ("LET", name, value_op)  # value_op can be a literal or nested op
+- ("EXPR", expr_op)        # placeholder for expressions
+- etc.
+
+This generator focuses on renderer-related constructs and a few common statements.
+"""
+from ..zexus_ast import Program, ExpressionStatement, BlockStatement, LetStatement, MapLiteral, StringLiteral, IntegerLiteral, ListLiteral, Identifier, CallExpression
+from typing import List, Any, Dict
+
+class BytecodeGenerator:
+	def __init__(self):
+		self.ops: List[tuple] = []
+
+	def generate(self, program: Program) -> List[tuple]:
+		self.ops = []
+		for stmt in getattr(program, "statements", []):
+			self._emit_statement(stmt)
+		return self.ops
+
+	def _emit_statement(self, stmt):
+		typ = type(stmt).__name__
+		if typ == "LetStatement":
+			name = stmt.name.value if hasattr(stmt.name, 'value') else str(stmt.name)
+			value = self._emit_expression_like(stmt.value)
+			self.ops.append(("LET", name, value))
+		elif typ == "ExpressionStatement":
+			self.ops.append(("EXPR", self._emit_expression_like(stmt.expression)))
+		elif typ == "ScreenStatement":
+			name = stmt.name.value if hasattr(stmt.name, 'value') else str(stmt.name)
+			props = self._emit_block_properties(stmt.body)
+			self.ops.append(("DEFINE_SCREEN", name, props))
+		elif typ == "ComponentStatement":
+			name = stmt.name.value if hasattr(stmt.name, 'value') else str(stmt.name)
+			props = self._emit_block_properties(stmt.properties)
+			self.ops.append(("DEFINE_COMPONENT", name, props))
+		elif typ == "ThemeStatement":
+			name = stmt.name.value if hasattr(stmt.name, 'value') else str(stmt.name)
+			props = self._emit_block_properties(stmt.properties)
+			self.ops.append(("DEFINE_THEME", name, props))
+		else:
+			# Fallback: try to handle common statements as generic expression
+			if hasattr(stmt, "expression"):
+				self.ops.append(("EXPR", self._emit_expression_like(getattr(stmt, "expression", None))))
+			else:
+				self.ops.append(("NOP", typ))
+
+	def _emit_block_properties(self, block):
+		# block may be a MapLiteral or BlockStatement (tolerant). Return a python dict.
+		if isinstance(block, MapLiteral):
+			return self._mapliteral_to_dict(block)
+		if isinstance(block, BlockStatement):
+			props = {}
+			for s in block.statements:
+				# Attempt to extract simple key: value from statements (best-effort)
+				if isinstance(s, ExpressionStatement):
+					expr = s.expression
+					# handle simple "key: value" represented as MapLiteral inside expression
+					# (Compiler grammar should ensure map-literals for property blocks)
+				# ignore unknowns
+			return props
+		# unknown node: return empty
+		return {}
+
+	def _mapliteral_to_dict(self, maplit: MapLiteral) -> Dict[str, Any]:
+		result = {}
+		for k_expr, v_expr in maplit.pairs:
+			# k_expr is likely Identifier or StringLiteral
+			key = getattr(k_expr, 'value', str(k_expr))
+			val = self._emit_expression_like(v_expr)
+			if isinstance(val, tuple) and val[0] == "LITERAL":
+				result[key] = val[1]
+			else:
+				result[key] = val
+		return result
+
+	def _emit_expression_like(self, expr):
+		# Emit a simple representation for literals and calls
+		if expr is None:
+			return ("LITERAL", None)
+		typ = type(expr).__name__
+		if typ == "StringLiteral":
+			return ("LITERAL", expr.value)
+		if typ == "IntegerLiteral":
+			return ("LITERAL", expr.value)
+		if typ == "FloatLiteral":
+			return ("LITERAL", expr.value)
+		if typ == "Boolean":
+			return ("LITERAL", expr.value)
+		if typ == "Identifier":
+			return ("IDENT", expr.value)
+		if typ == "CallExpression":
+			func = expr.function
+			func_name = getattr(func, 'value', None)
+			args = [self._emit_expression_like(a) for a in expr.arguments]
+			return ("CALL_BUILTIN", func_name, args)
+		if typ == "MapLiteral":
+			return ("MAP", self._mapliteral_to_dict(expr))
+		if typ == "ListLiteral":
+			return ("LIST", [self._emit_expression_like(e) for e in expr.elements])
+		# fallback
+		return ("EXPR", typ)
+
+# Backwards compatibility
+Generator = BytecodeGenerator

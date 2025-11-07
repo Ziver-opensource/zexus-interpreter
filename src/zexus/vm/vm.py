@@ -11,6 +11,14 @@ NULL = Null()
 TRUE = BooleanObj(True)
 FALSE = BooleanObj(False)
 
+# Attempt to use real renderer backend if available
+try:
+    from renderer import backend as _BACKEND
+    _BACKEND_AVAILABLE = True
+except Exception:
+    _BACKEND_AVAILABLE = False
+    _BACKEND = None
+
 class ZexusVM:
     def __init__(self, bytecode):
         self.bytecode = bytecode
@@ -114,6 +122,34 @@ class ZexusVM:
                 args = [self.stack.pop() for _ in range(arg_count)]
                 result = func.fn(*args)
                 self.stack.append(result)
+        elif opcode == "DEFINE_SCREEN":
+            _, name, props = operand
+            if _BACKEND_AVAILABLE:
+                try:
+                    _BACKEND.define_screen(name, props)
+                except Exception:
+                    # record in env fallback
+                    self.environment.setdefault("screens", {})[name] = props
+            else:
+                self.environment.setdefault("screens", {})[name] = props
+        elif opcode == "DEFINE_COMPONENT":
+            _, name, props = operand
+            if _BACKEND_AVAILABLE:
+                try:
+                    _BACKEND.define_component(name, props)
+                except Exception:
+                    self.environment.setdefault("components", {})[name] = props
+            else:
+                self.environment.setdefault("components", {})[name] = props
+        elif opcode == "DEFINE_THEME":
+            _, name, props = operand
+            if _BACKEND_AVAILABLE:
+                try:
+                    _BACKEND.set_theme(name, None)  # no-op mapping; themes are stored via env fallback
+                except Exception:
+                    self.environment.setdefault("themes", {})[name] = props
+            else:
+                self.environment.setdefault("themes", {})[name] = props
     
     def to_zexus_object(self, value):
         if isinstance(value, int):

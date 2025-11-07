@@ -52,6 +52,13 @@ EACH = "EACH"
 IN = "IN"
 ACTION = "ACTION"
 SCREEN = "SCREEN"
+COMPONENT = "COMPONENT"
+THEME = "THEME"
+COLOR = "COLOR"
+GRAPHICS = "GRAPHICS"
+CANVAS = "CANVAS"
+ANIMATION = "ANIMATION"
+CLOCK = "CLOCK"
 MAP = "MAP"
 WHILE = "WHILE"
 USE = "USE"
@@ -62,8 +69,28 @@ LAMBDA = "LAMBDA"
 DEBUG = "DEBUG"      # NEW: Debug token
 TRY = "TRY"          # NEW: Try token
 CATCH = "CATCH"      # NEW: Catch token
-EXTERNAL = "EXTERNAL" # NEW: External token
+EXTERNAL = "EXTERNAL" # NEW: From token
 FROM = "FROM"        # NEW: From token
+
+# RENDERER OPERATIONS (ADD THESE)
+MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)
+RENDER = "RENDER"              # Render screen: render_screen("login")
+ADD_TO = "ADD_TO"              # Add component: add_to_screen("login", "button")
+SET_THEME = "SET_THEME"        # Set theme: set_theme("dark")
+CREATE_CANVAS = "CREATE_CANVAS" # Create canvas: create_canvas(80, 25)
+DRAW = "DRAW"                  # Draw operation: draw_line(x1, y1, x2, y2)
+
+# PROPERTY TOKENS (ADD THESE)
+WIDTH = "WIDTH"
+HEIGHT = "HEIGHT"
+X = "X"
+Y = "Y"
+TEXT = "TEXT"
+BACKGROUND = "BACKGROUND"
+BORDER = "BORDER"
+STYLE = "STYLE"
+RADIUS = "RADIUS"
+FILL = "FILL"
 
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):

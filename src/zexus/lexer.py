@@ -278,6 +278,7 @@ class Lexer:
         return number_str
 
     def lookup_ident(self, ident):
+        # keyword lookup mapping (string -> token constant)
         keywords = {
             "let": LET,
             "print": PRINT,
@@ -301,6 +302,13 @@ class Lexer:
             "catch": CATCH,      # NEW: Catch keyword
             "external": EXTERNAL, # NEW: External keyword
             "from": FROM,        # NEW: From keyword
+            "screen": SCREEN,         # NEW: renderer keyword
+            "component": COMPONENT,   # NEW: renderer keyword
+            "theme": THEME,           # NEW: renderer keyword
+            "canvas": CANVAS,         # NEW (optional recognition)
+            "graphics": GRAPHICS,     # NEW (optional recognition)
+            "animation": ANIMATION,   # NEW (optional recognition)
+            "clock": CLOCK,           # NEW (optional recognition)
         }
         return keywords.get(ident, IDENT)
 

@@ -101,6 +101,23 @@ class ScreenStatement(Statement):
     def __repr__(self):
         return f"ScreenStatement(name={self.name})"
 
+# NEW: Component and Theme AST nodes for interpreter
+class ComponentStatement(Statement):
+    def __init__(self, name, properties):
+        self.name = name
+        self.properties = properties  # expected to be MapLiteral or BlockStatement
+
+    def __repr__(self):
+        return f"ComponentStatement(name={self.name}, properties={self.properties})"
+
+class ThemeStatement(Statement):
+    def __init__(self, name, properties):
+        self.name = name
+        self.properties = properties  # expected to be MapLiteral or BlockStatement
+
+    def __repr__(self):
+        return f"ThemeStatement(name={self.name}, properties={self.properties})"
+
 class ActionStatement(Statement):
     def __init__(self, name, parameters, body):
         self.name = name
