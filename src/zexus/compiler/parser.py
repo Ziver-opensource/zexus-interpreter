@@ -45,6 +45,7 @@ class ProductionParser:
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
             LAMBDA: self.parse_lambda_expression,
+            AWAIT: self.parse_await_expression,  # NEW: Await expression
         }
         
         self.infix_parse_fns = {
@@ -98,25 +99,25 @@ class ProductionParser:
                 return self.parse_for_each_statement()
             elif self.cur_token_is(ACTION):
                 return self.parse_action_statement()
-            elif self.cur_token_is(IF):
-                return self.parse_if_statement()
-            elif self.cur_token_is(WHILE):
-                return self.parse_while_statement()
-            elif self.cur_token_is(USE):
-                return self.parse_use_statement()
-            elif self.cur_token_is(EXPORT):
-                return self.parse_export_statement()
-            elif self.cur_token_is(TRY):
-                return self.parse_try_catch_statement()
-            elif self.cur_token_is(EXTERNAL):
-                return self.parse_external_declaration()
-            # NEW: renderer declarations
-            elif self.cur_token_is(SCREEN):
-                return self.parse_screen_statement()
-            elif self.cur_token_is(COMPONENT):
-                return self.parse_component_statement()
-            elif self.cur_token_is(THEME):
-                return self.parse_theme_statement()
+            elif self.cur_token_is(ASYNC):
+                # support "async action name ..." or "action async name ..."
+                # If "async action ..." then consume ASYNC and expect ACTION next
+                self.next_token()
+                if self.cur_token_is(ACTION):
+                    return self.parse_action_statement(async_flag=True)
+                # otherwise error
+                self.errors.append(f"Line {self.cur_token.line}: Expected 'action' after 'async'")
+                return None
+            elif self.cur_token_is(EVENT):
+                return self.parse_event_declaration()
+            elif self.cur_token_is(EMIT):
+                return self.parse_emit_statement()
+            elif self.cur_token_is(ENUM):
+                return self.parse_enum_declaration()
+            elif self.cur_token_is(PROTOCOL):
+                return self.parse_protocol_declaration()
+            elif self.cur_token_is(IMPORT):
+                return self.parse_import_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -423,95 +424,37 @@ class ProductionParser:
         
         return ForEachStatement(item=item, iterable=iterable, body=body)
 
-    def parse_action_statement(self):
+    def parse_action_statement(self, async_flag=False):
+        """Parse action declaration; supports optional async modifier (action async name(...) { ... } or async action ...)"""
+        # current token is ACTION (or we arrived here after consuming ASYNC)
+        is_async = async_flag
+
+        # Handle optional 'async' immediately after 'action': action async name ...
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "async":
+            # unusual: peek is IDENT with literal "async" — but lexer maps "async" to ASYNC token;
+            pass
+
+        # If next token is ASYNC (action async name ...)
+        if self.peek_token_is(ASYNC):
+            self.next_token()
+            is_async = True
+
+        # Continue normal action parse
         if not self.expect_peek(IDENT):
             return None
-            
         name = Identifier(self.cur_token.literal)
-        
+
         parameters = []
         if self.peek_token_is(LPAREN):
             self.next_token()
             parameters = self.parse_parameter_list()
-        
+
         body = self.parse_block()
-        
-        return ActionStatement(name=name, parameters=parameters, body=body)
-
-    def parse_parameter_list(self):
-        params = []
-        if self.peek_token_is(RPAREN):
-            self.next_token()
-            return params
-
-        self.next_token()
-        if self.cur_token_is(IDENT):
-            params.append(Identifier(self.cur_token.literal))
-
-        while self.peek_token_is(COMMA):
-            self.next_token()
-            self.next_token()
-            if self.cur_token_is(IDENT):
-                params.append(Identifier(self.cur_token.literal))
-
-        if not self.expect_peek(RPAREN):
-            return None
-
-        return params
-
-    def parse_while_statement(self):
-        if not self.expect_peek(LPAREN):
-            return None
-            
-        self.next_token()
-        condition = self.parse_expression(LOWEST)
-        
-        if not self.expect_peek(RPAREN):
-            return None
-            
-        body = self.parse_block()
-        
-        return WhileStatement(condition=condition, body=body)
-
-    def parse_use_statement(self):
-        if not self.expect_peek(STRING):
-            return None
-            
-        file_path = self.cur_token.literal
-        
-        alias = None
-        if self.peek_token_is(IDENT) and self.peek_token.literal == "as":
-            self.next_token()
-            self.next_token()
-            if self.cur_token_is(IDENT):
-                alias = self.cur_token.literal
-        
-        return UseStatement(file_path=file_path, alias=alias)
-
-    def parse_export_statement(self):
-        if not self.expect_peek(IDENT):
-            return None
-            
-        name = Identifier(self.cur_token.literal)
-        return ExportStatement(name=name)
-
-    def parse_expression_statement(self):
-        expression = self.parse_expression(LOWEST)
-        return ExpressionStatement(expression=expression)
-
-    # Lambda and other expression types
-    def parse_lambda_expression(self):
-        parameters = []
-        
-        if self.cur_token_is(LPAREN):
-            self.next_token()
-            parameters = self.parse_parameter_list()
-        elif self.cur_token_is(IDENT):
-            parameters = [Identifier(self.cur_token.literal)]
-            self.next_token()
-
-        body = self.parse_expression(LOWEST)
-        return LambdaExpression(parameters=parameters, body=body)
+        # Create ActionStatement with is_async flag (add attribute)
+        stmt = ActionStatement(name=name, parameters=parameters, body=body)
+        # attach async flag if supported by AST
+        setattr(stmt, "is_async", is_async)
+        return stmt
 
     def parse_action_literal(self):
         if not self.expect_peek(LPAREN):
@@ -522,144 +465,104 @@ class ProductionParser:
             return None
 
         body = self.parse_expression(LOWEST)
-        return ActionLiteral(parameters=parameters, body=body)
+        # If action literal is used as an expression, callers may expect a function-like node.
+        # Mark the ActionLiteral node to indicate expression-level function (helps lowering).
+        action_lit = ActionLiteral(parameters=parameters, body=body)
+        setattr(action_lit, "is_expression", True)
+        return action_lit
 
-    def parse_if_expression(self):
-        if not self.expect_peek(LPAREN):
-            return None
-            
+    def parse_await_expression(self):
+        # current token is AWAIT
         self.next_token()
-        condition = self.parse_expression(LOWEST)
-        
-        if not self.expect_peek(RPAREN):
+        value = self.parse_expression(LOWEST)
+        return AwaitExpression(expression=value)
+
+    def parse_event_declaration(self):
+        if not self.expect_peek(IDENT):
             return None
-            
+        name = Identifier(self.cur_token.literal)
+        body = self.parse_block()
+        return EventDeclaration(name=name, properties=body)
+
+    def parse_emit_statement(self):
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
+        payload = None
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            self.next_token()
+            payload = self.parse_expression(LOWEST)
+            if not self.expect_peek(RPAREN):
+                return None
+        elif self.peek_token_is(LBRACE):
+            self.next_token()
+            payload = self.parse_block()
+        return EmitStatement(name=name, payload=payload)
+
+    def parse_enum_declaration(self):
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
         if not self.expect_peek(LBRACE):
             return None
-            
-        consequence = self.parse_block()
-        
-        alternative = None
-        if self.cur_token_is(ELSE):
-            self.next_token()
-            if not self.expect_peek(LBRACE):
-                return None
-            alternative = self.parse_block()
-
-        return IfExpression(condition=condition, consequence=consequence, alternative=alternative)
-
-    def parse_embedded_literal(self):
-        # Simplified embedded literal parsing
-        return EmbeddedLiteral(language="unknown", code="")
-
-    # New: try-catch parsing
-    def parse_try_catch_statement(self):
-        """Basic try-catch parsing for production parser (more tolerant)"""
-        # current token is TRY
-        self.next_token()  # advance to what should be LBRACE or block indicator
-        # parse try block (brace block preferred)
-        try_block = self.parse_block()
-
-        # Expect a CATCH
-        if not self.cur_token_is(CATCH) and not self.peek_token_is(CATCH):
-            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected 'catch' after try block")
-            return None
-
-        # ensure we're at CATCH
-        if not self.cur_token_is(CATCH):
-            self.next_token()
-
-        # extract optional catch variable (tolerant handling)
-        error_var = Identifier("error")
-
-        # If next is parentheses, accept nested parentheses and find IDENT inside
-        if self.peek_token_is(LPAREN):
-            # move to first LPAREN
-            self.next_token()  # now at LPAREN
-            # advance inside parentheses, skip any extra '(' until IDENT or RPAREN encountered
-            self.next_token()
-            # Skip nested LPAREN until identifier or RPAREN
-            while self.cur_token_is(LPAREN) and not self.cur_token_is(EOF):
-                self.next_token()
-
-            # If ident found, use it
-            if self.cur_token_is(IDENT):
-                error_var = Identifier(self.cur_token.literal)
-                # consume remaining RPAREN tokens (tolerant)
-                while self.peek_token_is(RPAREN):
+        # parse simple comma-separated identifiers or key:value pairs
+        members = {}
+        self.next_token()
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            if self.cur_token_is(IDENT) or self.cur_token_is(STRING):
+                key = self.cur_token.literal
+                # optional colon value
+                val = None
+                if self.peek_token_is(COLON):
                     self.next_token()
-            else:
-                # No identifier inside parens; default to "error" and try to position at next relevant token
-                pass
-
-        # catch <ident> style (no parens)
-        elif self.peek_token_is(IDENT):
-            self.next_token()
-            if self.cur_token_is(IDENT):
-                error_var = Identifier(self.cur_token.literal)
-
-        # Move to the token that starts the catch block; tolerate optional tokens
-        # If current token is RPAREN, advance one to reach the following token (often LBRACE)
-        if self.cur_token_is(RPAREN) and not self.peek_token_is(EOF):
-            self.next_token()
-
-        # Ensure we're positioned to parse the catch block
-        if not (self.cur_token_is(LBRACE) or self.peek_token_is(LBRACE)):
-            # If next token is LBRACE, advance to it
-            if self.peek_token_is(LBRACE):
+                    self.next_token()
+                    if self.cur_token_is(INT):
+                        val = int(self.cur_token.literal)
+                members[key] = val
+            if self.peek_token_is(COMMA):
                 self.next_token()
-
-        # parse catch block
-        catch_block = self.parse_block()
-        return TryCatchStatement(try_block=try_block, error_variable=error_var, catch_block=catch_block)
-
-    # New: external declaration parsing
-    def parse_external_declaration(self):
-        """Parse: external action <name> from \"module\""""
-        # current token is EXTERNAL
-        if not self.expect_peek(ACTION):
+                self.next_token()
+                continue
+            self.next_token()
+        if not self.cur_token_is(RBRACE):
+            self.errors.append("Unclosed enum declaration")
             return None
+        return EnumDeclaration(name=name, members=members)
+
+    def parse_protocol_declaration(self):
         if not self.expect_peek(IDENT):
             return None
         name = Identifier(self.cur_token.literal)
-        # optional parameter list like external action foo(param1, ...)
-        parameters = []
-        if self.peek_token_is(LPAREN):
-            self.next_token()
-            parameters = self.parse_parameter_list() or []
-        if not self.expect_peek(FROM):
-            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected 'from' in external declaration")
+        if not self.expect_peek(LBRACE):
             return None
+        # parse simple list of method signatures (as identifiers)
+        spec = {"methods": []}
+        self.next_token()
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            if self.cur_token_is(IDENT):
+                spec["methods"].append(self.cur_token.literal)
+            if self.peek_token_is(COMMA):
+                self.next_token()
+                self.next_token()
+                continue
+            self.next_token()
+        if not self.cur_token_is(RBRACE):
+            self.errors.append("Unclosed protocol declaration")
+            return None
+        return ProtocolDeclaration(name=name, spec=spec)
+
+    def parse_import_statement(self):
         if not self.expect_peek(STRING):
-            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected module string in external declaration")
             return None
         module_path = self.cur_token.literal
-        return ExternalDeclaration(name=name, parameters=parameters, module_path=module_path)
-
-    # NEW: screen/component/theme parsing methods
-    def parse_screen_statement(self):
-        """Parse: Screen <name> { ... }"""
-        if not self.expect_peek(IDENT):
-            return None
-        name = Identifier(self.cur_token.literal)
-        body = self.parse_block()
-        return ScreenStatement(name=name, body=body)
-
-    def parse_component_statement(self):
-        """Parse: Component <name> { ... }"""
-        if not self.expect_peek(IDENT):
-            return None
-        name = Identifier(self.cur_token.literal)
-        body = self.parse_block()
-        return ComponentStatement(name=name, properties=body)
-
-    def parse_theme_statement(self):
-        """Parse: Theme <name> { ... }"""
-        if not self.expect_peek(IDENT):
-            return None
-        name = Identifier(self.cur_token.literal)
-        body = self.parse_block()
-        return ThemeStatement(name=name, properties=body)
+        alias = None
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "as":
+            self.next_token()
+            self.next_token()
+            if self.cur_token_is(IDENT):
+                alias = self.cur_token.literal
+        return ImportStatement(module_path=module_path, alias=alias)
 
     # Token utilities
     def next_token(self):

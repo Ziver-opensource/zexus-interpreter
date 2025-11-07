@@ -72,6 +72,15 @@ CATCH = "CATCH"      # NEW: Catch token
 EXTERNAL = "EXTERNAL" # NEW: From token
 FROM = "FROM"        # NEW: From token
 
+# ASYNC / AWAIT / MODULE / EVENT / ENUM / PROTOCOL tokens
+ASYNC = "ASYNC"
+AWAIT = "AWAIT"
+EVENT = "EVENT"
+EMIT = "EMIT"
+ENUM = "ENUM"
+PROTOCOL = "PROTOCOL"
+IMPORT = "IMPORT"
+
 # RENDERER OPERATIONS (ADD THESE)
 MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)
 RENDER = "RENDER"              # Render screen: render_screen("login")

@@ -309,6 +309,13 @@ class Lexer:
             "graphics": GRAPHICS,     # NEW (optional recognition)
             "animation": ANIMATION,   # NEW (optional recognition)
             "clock": CLOCK,           # NEW (optional recognition)
+            "async": ASYNC,
+            "await": AWAIT,
+            "event": EVENT,
+            "emit": EMIT,
+            "enum": ENUM,
+            "protocol": PROTOCOL,
+            "import": IMPORT,
         }
         return keywords.get(ident, IDENT)
 

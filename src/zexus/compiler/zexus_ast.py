@@ -383,3 +383,72 @@ class EmbeddedLiteral(Expression):
 
     def __repr__(self):
         return f"EmbeddedLiteral({self.language})"
+
+# NEW: AwaitExpression (used in compiler AST)
+class AwaitExpression(Expression):
+    def __init__(self, expression):
+        self.expression = expression
+
+    def token_literal(self):
+        return "await"
+
+    def __repr__(self):
+        return f"AwaitExpression({self.expression})"
+
+# NEW: EventDeclaration / EmitStatement
+class EventDeclaration(Statement):
+    def __init__(self, name, properties):
+        self.name = name
+        self.properties = properties
+
+    def token_literal(self):
+        return "event"
+
+    def __repr__(self):
+        return f"EventDeclaration({self.name})"
+
+class EmitStatement(Statement):
+    def __init__(self, name, payload=None):
+        self.name = name
+        self.payload = payload
+
+    def token_literal(self):
+        return "emit"
+
+    def __repr__(self):
+        return f"EmitStatement({self.name}, payload={self.payload})"
+
+# NEW: EnumDeclaration and ProtocolDeclaration
+class EnumDeclaration(Statement):
+    def __init__(self, name, members):
+        self.name = name
+        self.members = members
+
+    def token_literal(self):
+        return "enum"
+
+    def __repr__(self):
+        return f"EnumDeclaration({self.name})"
+
+class ProtocolDeclaration(Statement):
+    def __init__(self, name, spec):
+        self.name = name
+        self.spec = spec
+
+    def token_literal(self):
+        return "protocol"
+
+    def __repr__(self):
+        return f"ProtocolDeclaration({self.name})"
+
+# NEW: ImportStatement (explicit import syntax)
+class ImportStatement(Statement):
+    def __init__(self, module_path, alias=None):
+        self.module_path = module_path
+        self.alias = alias
+
+    def token_literal(self):
+        return "import"
+
+    def __repr__(self):
+        return f"ImportStatement({self.module_path} as {self.alias})"
