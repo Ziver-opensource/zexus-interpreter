@@ -38,6 +38,12 @@ class StructuralAnalyzer:
                 i += 1
                 continue
 
+            # Helper: skip tokens that are empty/whitespace-only literals when building blocks
+            # (these are cosmetic and lead to empty-expression parsing in context parser)
+            def _is_empty_token(tok):
+                lit = getattr(tok, 'literal', None)
+                return (lit == '' or lit is None) and tok.type != STRING and tok.type != IDENT
+
             # Try-catch: collect the try block and catch block separately
             if t.type == TRY:
                 start_idx = i
@@ -45,6 +51,8 @@ class StructuralAnalyzer:
                 try_block_tokens, next_idx = self._collect_brace_block(tokens, i + 1)
                 # include the 'try' token as part of the block for context
                 full_try_tokens = [t] + try_block_tokens
+                # filter out empty tokens from the recorded token lists
+                full_try_tokens = [tk for tk in full_try_tokens if not _is_empty_token(tk)]
                 self.blocks[block_id] = {
                     'id': block_id,
                     'type': 'try_catch',
@@ -61,6 +69,7 @@ class StructuralAnalyzer:
 
                 # If try block has inner statements, create child blocks for them
                 inner = try_block_tokens[1:-1] if try_block_tokens and len(try_block_tokens) >= 2 else []
+                inner = [tk for tk in inner if not _is_empty_token(tk)]
                 if inner:
                     # If it's a map-like object, keep as single child map_literal
                     if self._is_map_literal(inner):
@@ -68,7 +77,7 @@ class StructuralAnalyzer:
                             'id': block_id,
                             'type': 'map_literal',
                             'subtype': 'map_literal',
-                            'tokens': try_block_tokens,  # include braces
+                            'tokens': [tk for tk in try_block_tokens if not _is_empty_token(tk)],  # include braces
                             'start_token': try_block_tokens[0] if try_block_tokens else t,
                             'start_index': start_idx,
                             'end_index': next_idx - 1,
@@ -82,8 +91,8 @@ class StructuralAnalyzer:
                                 'id': block_id,
                                 'type': 'statement',
                                 'subtype': stmt_tokens[0].type if stmt_tokens else 'unknown',
-                                'tokens': stmt_tokens,
-                                'start_token': stmt_tokens[0] if stmt_tokens else try_block_tokens[0],
+                                'tokens': [tk for tk in stmt_tokens if not _is_empty_token(tk)],
+                                'start_token': (stmt_tokens[0] if stmt_tokens else try_block_tokens[0]),
                                 'start_index': start_idx,
                                 'end_index': start_idx + len(stmt_tokens),
                                 'parent': current_try_id
@@ -95,6 +104,7 @@ class StructuralAnalyzer:
                     catch_token = tokens[i]
                     catch_block_tokens, after_catch_idx = self._collect_brace_block(tokens, i + 1)
                     full_catch_tokens = [catch_token] + catch_block_tokens
+                    full_catch_tokens = [tk for tk in full_catch_tokens if not _is_empty_token(tk)]
                     self.blocks[block_id] = {
                         'id': block_id,
                         'type': 'try_catch',
@@ -111,13 +121,14 @@ class StructuralAnalyzer:
 
                     # create child statements for catch block similarly
                     inner_catch = catch_block_tokens[1:-1] if catch_block_tokens and len(catch_block_tokens) >= 2 else []
+                    inner_catch = [tk for tk in inner_catch if not _is_empty_token(tk)]
                     if inner_catch:
                         if self._is_map_literal(inner_catch):
                             self.blocks[block_id] = {
                                 'id': block_id,
                                 'type': 'map_literal',
                                 'subtype': 'map_literal',
-                                'tokens': catch_block_tokens,
+                                'tokens': [tk for tk in catch_block_tokens if not _is_empty_token(tk)],
                                 'start_token': catch_block_tokens[0],
                                 'start_index': i,
                                 'end_index': after_catch_idx - 1,
@@ -131,8 +142,8 @@ class StructuralAnalyzer:
                                     'id': block_id,
                                     'type': 'statement',
                                     'subtype': stmt_tokens[0].type if stmt_tokens else 'unknown',
-                                    'tokens': stmt_tokens,
-                                    'start_token': stmt_tokens[0] if stmt_tokens else catch_block_tokens[0],
+                                    'tokens': [tk for tk in stmt_tokens if not _is_empty_token(tk)],
+                                    'start_token': (stmt_tokens[0] if stmt_tokens else catch_block_tokens[0]),
                                     'start_index': i,
                                     'end_index': i + len(stmt_tokens),
                                     'parent': current_catch_id
@@ -144,11 +155,13 @@ class StructuralAnalyzer:
             if t.type == LBRACE:
                 block_tokens, next_idx = self._collect_brace_block(tokens, i)
                 this_block_id = block_id
+                # filter empty tokens before storing
+                filtered_block_tokens = [tk for tk in block_tokens if not _is_empty_token(tk)]
                 self.blocks[this_block_id] = {
                     'id': this_block_id,
                     'type': 'block',
                     'subtype': 'brace_block',
-                    'tokens': block_tokens,
+                    'tokens': filtered_block_tokens,
                     'start_token': tokens[i],
                     'start_index': i,
                     'end_index': next_idx - 1,
@@ -158,13 +171,14 @@ class StructuralAnalyzer:
 
                 # split inner tokens into child blocks unless it's a map literal
                 inner = block_tokens[1:-1] if block_tokens and len(block_tokens) >= 2 else []
+                inner = [tk for tk in inner if not _is_empty_token(tk)]
                 if inner:
                     if self._is_map_literal(inner):
                         self.blocks[block_id] = {
                             'id': block_id,
                             'type': 'map_literal',
                             'subtype': 'map_literal',
-                            'tokens': block_tokens,  # keep full braces
+                            'tokens': [tk for tk in block_tokens if not _is_empty_token(tk)],  # keep full braces
                             'start_token': block_tokens[0],
                             'start_index': i,
                             'end_index': next_idx - 1,
@@ -178,8 +192,8 @@ class StructuralAnalyzer:
                                 'id': block_id,
                                 'type': 'statement',
                                 'subtype': stmt_tokens[0].type if stmt_tokens else 'unknown',
-                                'tokens': stmt_tokens,
-                                'start_token': stmt_tokens[0] if stmt_tokens else block_tokens[0],
+                                'tokens': [tk for tk in stmt_tokens if not _is_empty_token(tk)],
+                                'start_token': (stmt_tokens[0] if stmt_tokens else block_tokens[0]),
                                 'start_index': i,
                                 'end_index': i + len(stmt_tokens),
                                 'parent': this_block_id
@@ -209,18 +223,19 @@ class StructuralAnalyzer:
                     if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LPAREN:
                         if any(st.type == ASSIGN for st in stmt_tokens):
                             break
-                    stmt_tokens.append(tj)
+                        stmt_tokens.append(tj)
                     j += 1
-                self.blocks[block_id] = {
-                    'id': block_id,
-                    'type': 'statement',
-                    'subtype': t.type,
-                    'tokens': stmt_tokens,
-                    'start_token': tokens[start_idx],
-                    'start_index': start_idx,
-                    'end_index': j,
-                    'parent': None
-                }
+                    filtered_stmt_tokens = [tk for tk in stmt_tokens if not _is_empty_token(tk)]
+                    self.blocks[block_id] = {
+                        'id': block_id,
+                        'type': 'statement',
+                        'subtype': t.type,
+                        'tokens': filtered_stmt_tokens,
+                        'start_token': (tokens[start_idx] if filtered_stmt_tokens else tokens[start_idx]),
+                        'start_index': start_idx,
+                        'end_index': j,
+                        'parent': None
+                    }
                 block_id += 1
                 i = j
                 continue
@@ -237,13 +252,13 @@ class StructuralAnalyzer:
                     break
                 run_tokens.append(tj)
                 j += 1
-
+            filtered_run_tokens = [tk for tk in run_tokens if not _is_empty_token(tk)]
             self.blocks[block_id] = {
                 'id': block_id,
                 'type': 'statement',
-                'subtype': run_tokens[0].type if run_tokens else 'token_run',
-                'tokens': run_tokens,
-                'start_token': run_tokens[0] if run_tokens else t,
+                'subtype': (filtered_run_tokens[0].type if filtered_run_tokens else (run_tokens[0].type if run_tokens else 'token_run')),
+                'tokens': filtered_run_tokens,
+                'start_token': (filtered_run_tokens[0] if filtered_run_tokens else (run_tokens[0] if run_tokens else t)),
                 'start_index': start_idx,
                 'end_index': j - 1,
                 'parent': None

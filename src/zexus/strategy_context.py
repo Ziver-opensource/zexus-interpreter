@@ -63,6 +63,18 @@ class ContextStackParser:
         self.push_context(block_type, context_name)
 
         try:
+            # Early exit: if a block has no meaningful tokens, skip parsing it
+            tokens = block_info.get('tokens', []) or []
+            def _meaningful(tok):
+                lit = getattr(tok, 'literal', None)
+                # treat identifiers, strings, numbers and structural tokens as meaningful
+                if tok.type in {IDENT, STRING, INT, FLOAT, LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COMMA, DOT, SEMICOLON, ASSIGN, LAMBDA}:
+                    return True
+                return not (lit is None or lit == '')
+
+            if not any(_meaningful(t) for t in tokens):
+                ctx_debug(f"Skipping empty/insignificant block tokens for {block_type}", level='debug')
+                return None
             # Use appropriate parsing strategy for this context
             if block_type in self.context_rules:
                 result = self.context_rules[block_type](block_info, all_tokens)
