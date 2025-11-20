@@ -31,7 +31,7 @@ EvaluationError = ObjectEvaluationError
 
 # Helper to centralize error checks (includes the new FixedEvaluationError)
 def is_error(obj):
-    return isinstance(obj, (EvaluationError, ObjectEvaluationError, FixedEvaluationError))
+    return isinstance(obj, (EvaluationError, ObjectEvaluationError))
 
 # Summary counters for lightweight, 5-line summary logging when debug is off
 EVAL_SUMMARY = {
