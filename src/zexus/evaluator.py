@@ -12,7 +12,8 @@ from .zexus_ast import (
     ExactlyStatement, TryCatchStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
     ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
     Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression,
-    ExportStatement, LambdaExpression, FromStatement
+    ExportStatement, LambdaExpression, FromStatement, ComponentStatement, ThemeStatement,
+    DebugStatement, ExternalDeclaration  # Add all missing types
 )
 
 from .object import (
