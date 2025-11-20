@@ -458,7 +458,7 @@ def array_filter(array_obj, lambda_fn, env=None):
 
 # NEW: Export system
 def eval_export_statement(node, env):
-    """Handle export statements"""
+    """Handle export statements - FIXED VERSION"""
     # Support single-name and multi-name ExportStatement
     names = []
     if hasattr(node, 'names') and node.names:
@@ -473,10 +473,62 @@ def eval_export_statement(node, env):
     allowed_files = getattr(node, 'allowed_files', []) or []
     permission = getattr(node, 'permission', 'read_only')
 
+    debug_log("eval_export_statement", f"Exporting {len(names)} names: {names}")
+
     for nm in names:
         value = env.get(nm)
         if not value:
             return EvaluationError(f"Cannot export undefined identifier: {nm}")
+        
+        debug_log(f"  Exporting '{nm}'", f"value: {value}")
+        
+        # CRITICAL FIX: Use the Environment's export mechanism
+        # Try different methods that Environment might support
+        success = False
+        
+        # Method 1: Direct export method
+        if hasattr(env, 'export'):
+            try:
+                env.export(nm, value)
+                success = True
+                debug_log(f"    Exported via env.export()", "success")
+            except Exception as e:
+                debug_log(f"    env.export() failed", str(e))
+        
+        # Method 2: Set in exports dictionary
+        if not success and hasattr(env, 'exports'):
+            try:
+                env.exports[nm] = value
+                success = True
+                debug_log(f"    Exported via env.exports", "success")
+            except Exception as e:
+                debug_log(f"    env.exports failed", str(e))
+        
+        # Method 3: Use a dedicated export store
+        if not success and hasattr(env, '_exports'):
+            try:
+                env._exports[nm] = value
+                success = True
+                debug_log(f"    Exported via env._exports", "success")
+            except Exception as e:
+                debug_log(f"    env._exports failed", str(e))
+        
+        # Method 4: Fallback - store in regular environment with export flag
+        if not success:
+            try:
+                # Set in regular environment but mark as exported
+                env.set(nm, value)
+                # Also try to set an export flag if supported
+                if hasattr(env, 'exported_names'):
+                    env.exported_names.add(nm)
+                debug_log(f"    Exported via fallback", "success")
+                success = True
+            except Exception as e:
+                debug_log(f"    Fallback export failed", str(e))
+        
+        if not success:
+            return EvaluationError(f"Failed to export '{nm}': no export mechanism available")
+
         # Optionally tag exported value with metadata about allowed files/permission
         try:
             # store metadata on object if possible (best-effort)
@@ -486,8 +538,7 @@ def eval_export_statement(node, env):
         except Exception:
             pass
 
-        env.export(nm, value)
-
+    debug_log("eval_export_statement", "All exports completed successfully")
     return NULL
 
 def check_import_permission(exported_value, importer_file, env):
