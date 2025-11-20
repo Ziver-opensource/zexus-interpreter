@@ -180,7 +180,7 @@ def eval_identifier(node, env):
 
     debug_log("  Identifier not found", node.value)
     # FIXED: Return the new FixedEvaluationError so downstream code won't crash if len() is used
-    return FixedEvaluationError(f"Identifier '{node.value}' not found")
+    return EvaluationError(f"Identifier '{node.value}' not found")
 
 def is_truthy(obj):
     # FIXED: Handle all error types
@@ -1296,7 +1296,7 @@ def eval_node(node, env, stack_trace=None):
             # Handle array methods with lambdas
             if isinstance(obj, List):
                 args = eval_expressions(node.arguments, env)
-                # FIXED: treat any error (including FixedEvaluationError) as error
+          # FIXED: treat any error as error
                 if is_error(args):
                     return args
 
