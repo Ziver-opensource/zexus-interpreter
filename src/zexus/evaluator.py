@@ -13,11 +13,11 @@ from .zexus_ast import (
     ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
     Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression,
     ExportStatement, LambdaExpression, FromStatement, ComponentStatement, ThemeStatement,
-    DebugStatement, ExternalDeclaration  # Add all missing types
+    DebugStatement, ExternalDeclaration, EntityStatement, SealStatement # Add all missing types
 )
 
 from .object import (
-    Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, 
+    Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj,
     Builtin, Action, EmbeddedCode, ReturnValue, LambdaFunction, DateTime, Math, File, Debug,
     EvaluationError as ObjectEvaluationError
 )
@@ -113,6 +113,13 @@ def eval_program(statements, env):
 def eval_assignment_expression(node, env):
     """Handle assignment expressions like: x = 5"""
     debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
+
+    # CRITICAL FIX: Add sealed object check before assignment
+    from .security import SealedObject
+    target_obj = env.get(node.name.value)
+    if isinstance(target_obj, SealedObject):
+        return EvaluationError(f"Cannot assign to sealed object: {node.name.value}")
+
     value = eval_node(node.value, env)
     # Check using helper
     if is_error(value):
@@ -192,7 +199,7 @@ def is_truthy(obj):
 
 def eval_prefix_expression(operator, right):
     debug_log("eval_prefix_expression", f"{operator} {right}")
-    if isinstance(right, (EvaluationError, ObjectEvaluationError)):
+    if is_error(right): # Use is_error helper
         return right
 
     if operator == "!":
@@ -224,9 +231,9 @@ def eval_minus_prefix_operator_expression(right):
 def eval_infix_expression(operator, left, right):
     debug_log("eval_infix_expression", f"{left} {operator} {right}")
     # Handle errors first
-    if isinstance(left, (EvaluationError, ObjectEvaluationError)):
+    if is_error(left): # Use is_error helper
         return left
-    if isinstance(right, (EvaluationError, ObjectEvaluationError)):
+    if is_error(right): # Use is_error helper
         return right
 
     # Logical operators
@@ -296,12 +303,12 @@ def eval_integer_infix_expression(operator, left, right):
     if operator == "+": return Integer(left_val + right_val)
     elif operator == "-": return Integer(left_val - right_val)
     elif operator == "*": return Integer(left_val * right_val)
-    elif operator == "/": 
-        if right_val == 0: 
+    elif operator == "/":
+        if right_val == 0:
             return EvaluationError("Division by zero")
         return Integer(left_val // right_val)
-    elif operator == "%": 
-        if right_val == 0: 
+    elif operator == "%":
+        if right_val == 0:
             return EvaluationError("Modulo by zero")
         return Integer(left_val % right_val)
     elif operator == "<": return TRUE if left_val < right_val else FALSE
@@ -319,12 +326,12 @@ def eval_float_infix_expression(operator, left, right):
     if operator == "+": return Float(left_val + right_val)
     elif operator == "-": return Float(left_val - right_val)
     elif operator == "*": return Float(left_val * right_val)
-    elif operator == "/": 
-        if right_val == 0: 
+    elif operator == "/":
+        if right_val == 0:
             return EvaluationError("Division by zero")
         return Float(left_val / right_val)
-    elif operator == "%": 
-        if right_val == 0: 
+    elif operator == "%":
+        if right_val == 0:
             return EvaluationError("Modulo by zero")
         return Float(left_val % right_val)
     elif operator == "<": return TRUE if left_val < right_val else FALSE
@@ -344,7 +351,7 @@ def eval_string_infix_expression(operator, left, right):
 def eval_if_expression(ie, env):
     debug_log("eval_if_expression", "Evaluating condition")
     condition = eval_node(ie.condition, env)
-    if isinstance(condition, (EvaluationError, ObjectEvaluationError)):
+    if is_error(condition): # Use is_error helper
         return condition
 
     if is_truthy(condition):
@@ -417,7 +424,7 @@ def array_reduce(array_obj, lambda_fn, initial_value=None, env=None):
     for i in range(start_index, len(array_obj.elements)):
         element = array_obj.elements[i]
         result = apply_function(lambda_fn, [accumulator, element])
-        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
+        if is_error(result): # Use is_error helper
             return result
         accumulator = result
 
@@ -433,7 +440,7 @@ def array_map(array_obj, lambda_fn, env=None):
     mapped_elements = []
     for element in array_obj.elements:
         result = apply_function(lambda_fn, [element])
-        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
+        if is_error(result): # Use is_error helper
             return result
         mapped_elements.append(result)
 
@@ -449,7 +456,7 @@ def array_filter(array_obj, lambda_fn, env=None):
     filtered_elements = []
     for element in array_obj.elements:
         result = apply_function(lambda_fn, [element])
-        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
+        if is_error(result): # Use is_error helper
             return result
         if is_truthy(result):
             filtered_elements.append(element)
@@ -720,7 +727,7 @@ def builtin_string(*args):
         result = String(f"<built-in function: {arg.name}>")
     elif isinstance(arg, DateTime):
         result = String(f"<DateTime: {arg.timestamp}>")
-    elif isinstance(arg, (EvaluationError, ObjectEvaluationError)):
+    elif is_error(arg): # Use is_error helper
         result = String(str(arg))
     elif arg == NULL:
         result = String("null")
@@ -1108,7 +1115,7 @@ def eval_let_statement_fixed(node, env, stack_trace):
 
     # CRITICAL FIX: Evaluate the value FIRST, before setting the variable
     value = eval_node(node.value, env, stack_trace)
-    if isinstance(value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(value): # Use is_error helper
         debug_log("  Let statement value evaluation error", value)
         return value
 
@@ -1124,7 +1131,7 @@ def eval_try_catch_statement_fixed(node, env, stack_trace):
     try:
         debug_log("    Executing try block")
         result = eval_node(node.try_block, env, stack_trace)
-        if is_error(result):
+        if is_error(result): # Use is_error helper
             debug_log("    Try block returned error", result)
             catch_env = Environment(outer=env)
             error_var_name = node.error_variable.value if node.error_variable else "error"
@@ -1180,7 +1187,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == ReturnStatement:
             debug_log("  ReturnStatement node")
             val = eval_node(node.return_value, env, stack_trace)
-            if isinstance(val, (EvaluationError, ObjectEvaluationError)):
+            if is_error(val): # Use is_error helper
                 return val
             return ReturnValue(val)
 
@@ -1212,7 +1219,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == IfStatement:
             debug_log("  IfStatement node")
             condition = eval_node(node.condition, env, stack_trace)
-            if isinstance(condition, (EvaluationError, ObjectEvaluationError)):
+            if is_error(condition): # Use is_error helper
                 return condition
             if is_truthy(condition):
                 debug_log("    If condition true")
@@ -1228,7 +1235,7 @@ def eval_node(node, env, stack_trace=None):
             result = NULL
             while True:
                 condition = eval_node(node.condition, env, stack_trace)
-                if isinstance(condition, (EvaluationError, ObjectEvaluationError)):
+                if is_error(condition): # Use is_error helper
                     return condition
                 if not is_truthy(condition):
                     break
@@ -1240,7 +1247,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == ForEachStatement:
             debug_log("  ForEachStatement node", f"for each {node.item.value}")
             iterable = eval_node(node.iterable, env, stack_trace)
-            if isinstance(iterable, (EvaluationError, ObjectEvaluationError)):
+            if is_error(iterable): # Use is_error helper
                 return iterable
             if not isinstance(iterable, List):
                 return EvaluationError("for-each loop expected list")
@@ -1265,7 +1272,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == PropertyAccessExpression:
             debug_log("  PropertyAccessExpression node", f"{node.object}.{node.property}")
             obj = eval_node(node.object, env, stack_trace)
-            if isinstance(obj, (EvaluationError, ObjectEvaluationError)):
+            if is_error(obj): # Use is_error helper
                 return obj
             property_name = node.property.value
 
@@ -1274,7 +1281,18 @@ def eval_node(node, env, stack_trace=None):
                     return String(obj.code)
                 elif property_name == "language":
                     return String(obj.language)
-            return NULL
+            # Default behavior for property access: return NULL if not found
+            # (eval_identifier would return an error, but property access
+            # might just mean a missing property in dynamic objects like Maps)
+            # However, for entity instances, we would expect a proper getter.
+            if isinstance(obj, Map):
+                return obj.pairs.get(property_name, NULL)
+            # You might have a specific `EntityInstance` or similar object
+            # that implements a `get` method for properties.
+            elif hasattr(obj, 'get') and callable(obj.get):
+                return obj.get(property_name)
+            
+            return NULL # Or raise an error if strict property access is desired
 
         elif node_type == AST_Boolean:
             debug_log("  Boolean node", f"value: {node.value}")
@@ -1288,15 +1306,14 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == MethodCallExpression:
             debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
             obj = eval_node(node.object, env, stack_trace)
-            if is_error(obj):
+            if is_error(obj): # Use is_error helper
                 return obj
             method_name = node.method.value
 
             # Handle array methods with lambdas
             if isinstance(obj, List):
                 args = eval_expressions(node.arguments, env)
-          # FIXED: treat any error as error
-                if is_error(args):
+                if is_error(args): # Use is_error helper
                     return args
 
                 if method_name == "reduce":
@@ -1317,11 +1334,11 @@ def eval_node(node, env, stack_trace=None):
             # Handle embedded code method calls
             if isinstance(obj, EmbeddedCode):
                 args = eval_expressions(node.arguments, env)
-                if is_error(args):
+                if is_error(args): # Use is_error helper
                     return args
                 # Simplified embedded execution
                 print(f"[EMBED] Executing {obj.language}.{method_name}")
-                return Integer(42)
+                return Integer(42) # Placeholder result
 
             return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
 
@@ -1332,7 +1349,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == PrintStatement:
             debug_log("  PrintStatement node")
             val = eval_node(node.value, env, stack_trace)
-            if isinstance(val, (EvaluationError, ObjectEvaluationError)):
+            if is_error(val): # Use is_error helper
                 # Print errors to stderr but don't stop execution
                 print(f"❌ Error: {val}", file=sys.stderr)
                 return NULL
@@ -1470,7 +1487,7 @@ def eval_node(node, env, stack_trace=None):
                         # Check permission if importer_file is available
                         if importer_file:
                             perm_check = check_import_permission(value, importer_file, env)
-                            if is_error(perm_check):
+                            if is_error(perm_check): # Use is_error helper
                                 debug_log("  Permission denied for export", name)
                                 return perm_check
                         env.set(name, value)
@@ -1488,7 +1505,7 @@ def eval_node(node, env, stack_trace=None):
             # Reuse the UseStatement logic to obtain module env
             use_node = UseStatement(node.file_path)
             res = eval_node(use_node, env, stack_trace)
-            if is_error(res):
+            if is_error(res): # Use is_error helper
                 return res
 
             # module should now be available in env (either alias or exports)
@@ -1515,7 +1532,7 @@ def eval_node(node, env, stack_trace=None):
                     # Check permission if importer_file is available
                     if importer_file:
                         perm_check = check_import_permission(value, importer_file, env)
-                        if is_error(perm_check):
+                        if is_error(perm_check): # Use is_error helper
                             debug_log("  Permission denied for from-import", src_name)
                             return perm_check
                     env.set(as_name, value)
@@ -1530,7 +1547,7 @@ def eval_node(node, env, stack_trace=None):
             props = None
             if hasattr(node, 'properties') and node.properties is not None:
                 props_val = eval_node(node.properties, env, stack_trace)
-                if is_error(props_val):
+                if is_error(props_val): # Use is_error helper
                     return props_val
                 props = _to_python(props_val) if isinstance(props_val, (Map, List, String)) else None
             # Register via runtime builtin if available
@@ -1542,7 +1559,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == ThemeStatement:
             debug_log("  ThemeStatement node", node.name.value)
             props_val = eval_node(node.properties, env, stack_trace) if hasattr(node, 'properties') else NULL
-            if is_error(props_val):
+            if is_error(props_val): # Use is_error helper
                 return props_val
             # Set theme locally
             env.set(node.name.value, props_val)
@@ -1551,7 +1568,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == DebugStatement:
             debug_log("  DebugStatement node")
             val = eval_node(node.value, env, stack_trace)
-            if is_error(val):
+            if is_error(val): # Use is_error helper
                 return val
             Debug.log(String(str(val)))
             return NULL
@@ -1567,6 +1584,16 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == ExactlyStatement:
             debug_log("  ExactlyStatement node")
             return eval_node(node.body, env, stack_trace)
+
+        # NEW: EntityStatement - Call the helper for entity definition
+        elif node_type == EntityStatement:
+            debug_log("  EntityStatement node", node.name.value)
+            return eval_entity_statement(node, env)
+
+        # NEW: SealStatement - Call the helper for sealing
+        elif node_type == SealStatement:
+            debug_log("  SealStatement node", node.target)
+            return eval_seal_statement(node, env, stack_trace)
 
         # Expressions
         elif node_type == IntegerLiteral:
@@ -1620,7 +1647,7 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == CallExpression:
             debug_log("🚀 CallExpression node", f"Calling {node.function}")
             function = eval_node(node.function, env, stack_trace)
-            if is_error(function):
+            if is_error(function): # Use is_error helper
                 debug_log("  Function evaluation error", function)
                 return function
 
@@ -1640,19 +1667,20 @@ def eval_node(node, env, stack_trace=None):
             return result
 
         elif node_type == PrefixExpression:
+    # Use is_error helper to check `right`
             debug_log("  PrefixExpression node", f"{node.operator} {node.right}")
             right = eval_node(node.right, env, stack_trace)
-            if isinstance(right, (EvaluationError, ObjectEvaluationError)):
+            if is_error(right):
                 return right
             return eval_prefix_expression(node.operator, right)
 
         elif node_type == InfixExpression:
             debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")
             left = eval_node(node.left, env, stack_trace)
-            if isinstance(left, (EvaluationError, ObjectEvaluationError)):
+            if is_error(left): # Use is_error helper
                 return left
             right = eval_node(node.right, env, stack_trace)
-            if isinstance(right, (EvaluationError, ObjectEvaluationError)):
+            if is_error(right): # Use is_error helper
                 return right
             return eval_infix_expression(node.operator, left, right)
 
@@ -1671,18 +1699,23 @@ def eval_node(node, env, stack_trace=None):
 
 
 # =====================================================
-# NEW STATEMENT HANDLERS - ENTITY, VERIFY, CONTRACT, PROTECT
+# NEW STATEMENT HANDLERS - ENTITY, VERIFY, CONTRACT, PROTECT, SEAL
 # =====================================================
 
 def eval_entity_statement(node, env):
     """Evaluate entity statement - create entity definition"""
-    from .security import EntityDefinition
+    from .object import EntityDefinition # Ensure EntityDefinition is imported from object.py
 
     properties = {}
     for prop in node.properties:
-        properties[prop["name"]] = {
-            "type": prop["type"],
-            "default_value": prop.get("default_value")
+        prop_name = prop.name.value if hasattr(prop.name, 'value') else str(prop.name)
+        prop_type = prop.type.value if hasattr(prop.type, 'value') else str(prop.type)
+        default_value = eval_node(prop.default_value, env) if hasattr(prop, 'default_value') and prop.default_value else NULL
+        if is_error(default_value):
+            return default_value
+        properties[prop_name] = {
+            "type": prop_type,
+            "default_value": default_value # Store Zexus object for defaults
         }
 
     entity_def = EntityDefinition(node.name.value, properties)
@@ -1696,24 +1729,30 @@ def eval_verify_statement(node, env, stack_trace=None):
 
     # Evaluate target function
     target_value = eval_node(node.target, env, stack_trace)
-    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(target_value): # Use is_error helper
         return target_value
 
     # Evaluate conditions
     checks = []
     for condition_node in node.conditions:
         condition_value = eval_node(condition_node, env, stack_trace)
-        if isinstance(condition_value, (EvaluationError, ObjectEvaluationError)):
+        if is_error(condition_value): # Use is_error helper
             return condition_value
+        # Assuming condition_value is a Zexus object that can be evaluated to truthy/falsy
+        # Or if it's an Action/Lambda, it should be wrapped.
         if callable(condition_value) or isinstance(condition_value, Action):
             checks.append(VerificationCheck(str(condition_node), lambda ctx: condition_value))
+        else:
+             # For simpler truthy/falsy conditions directly from eval_node
+            checks.append(VerificationCheck(str(condition_node), lambda ctx, cond=condition_value: cond))
+
 
     # Wrap function with verification
     wrapped = VerifyWrapper(target_value, checks, node.error_handler)
 
     # Register in security context
     ctx = get_security_context()
-    ctx.register_verify_check(str(node.target), wrapped)
+    ctx.register_verify_check(str(node.target), wrapped) # Assuming target has a string representation for key
 
     return wrapped
 
@@ -1723,15 +1762,24 @@ def eval_contract_statement(node, env, stack_trace=None):
     from .security import SmartContract
 
     storage_vars = {}
-    for storage_var in node.storage_vars:
-        storage_vars[storage_var["name"]] = {}
+    for storage_var_node in node.storage_vars:
+        storage_var_name = storage_var_node.name.value
+        # Initial value might be present
+        initial_value = eval_node(storage_var_node.initial_value, env) if hasattr(storage_var_node, 'initial_value') and storage_var_node.initial_value else NULL
+        if is_error(initial_value):
+            return initial_value
+        storage_vars[storage_var_name] = initial_value
 
     actions = {}
-    for action in node.actions:
-        actions[action.name.value] = action
+    for action_node in node.actions:
+        # Assuming action_node is an ActionStatement or ActionLiteral
+        action_obj = eval_node(action_node, env, stack_trace) # Evaluate action literal/statement
+        if is_error(action_obj):
+            return action_obj
+        actions[action_node.name.value] = action_obj
 
     contract = SmartContract(node.name.value, storage_vars, actions)
-    contract.deploy()
+    contract.deploy() # This should probably be a method call from Zexus or an explicit statement
 
     env.set(node.name.value, contract)
     return NULL
@@ -1743,12 +1791,12 @@ def eval_protect_statement(node, env, stack_trace=None):
 
     # Evaluate target
     target_value = eval_node(node.target, env, stack_trace)
-    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(target_value): # Use is_error helper
         return target_value
 
     # Evaluate rules
     rules_value = eval_node(node.rules, env, stack_trace)
-    if isinstance(rules_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(rules_value): # Use is_error helper
         return rules_value
 
     # Convert rules to dict
@@ -1759,7 +1807,7 @@ def eval_protect_statement(node, env, stack_trace=None):
             rules_dict[key_str] = value
 
     # Create and register protection policy
-    policy = ProtectionPolicy(str(node.target), rules_dict, node.enforcement_level)
+    policy = ProtectionPolicy(str(node.target), rules_dict, node.enforcement_level) # Assuming target has a string representation
     ctx = get_security_context()
     ctx.register_protection(str(node.target), policy)
 
@@ -1772,7 +1820,7 @@ def eval_middleware_statement(node, env):
 
     # Evaluate handler
     handler = eval_node(node.handler, env)
-    if isinstance(handler, (EvaluationError, ObjectEvaluationError)):
+    if is_error(handler): # Use is_error helper
         return handler
 
     # Create middleware
@@ -1791,7 +1839,7 @@ def eval_auth_statement(node, env):
 
     # Evaluate config
     config_value = eval_node(node.config, env)
-    if isinstance(config_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(config_value): # Use is_error helper
         return config_value
 
     # Convert config to dict
@@ -1817,17 +1865,17 @@ def eval_throttle_statement(node, env):
 
     # Evaluate target and limits
     target_value = eval_node(node.target, env)
-    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(target_value): # Use is_error helper
         return target_value
 
     limits_value = eval_node(node.limits, env)
-    if isinstance(limits_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(limits_value): # Use is_error helper
         return limits_value
 
     # Extract limits from map
     rpm = 100  # Default requests per minute
     burst = 10  # Default burst size
-    per_user = False
+    per_user = FALSE # Default is BooleanObj(False)
 
     if isinstance(limits_value, Map):
         for key, value in limits_value.pairs.items():
@@ -1837,10 +1885,12 @@ def eval_throttle_statement(node, env):
             elif key_str == "burst_size" and isinstance(value, Integer):
                 burst = value.value
             elif key_str == "per_user" and isinstance(value, BooleanObj):
-                per_user = value.value
+                per_user = value # Keep as BooleanObj for consistency
+            elif key_str == "per_user" and isinstance(value, Boolean): # If AST Boolean, convert to Zexus BooleanObj
+                per_user = TRUE if value.value else FALSE
 
     # Create rate limiter
-    limiter = RateLimiter(rpm, burst, per_user)
+    limiter = RateLimiter(rpm, burst, per_user.value) # Pass Python bool to RateLimiter
 
     # Register in security context
     ctx = get_security_context()
@@ -1856,11 +1906,11 @@ def eval_cache_statement(node, env):
 
     # Evaluate target and policy
     target_value = eval_node(node.target, env)
-    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(target_value): # Use is_error helper
         return target_value
 
     policy_value = eval_node(node.policy, env)
-    if isinstance(policy_value, (EvaluationError, ObjectEvaluationError)):
+    if is_error(policy_value): # Use is_error helper
         return policy_value
 
     # Extract policy settings from map
@@ -1887,56 +1937,77 @@ def eval_cache_statement(node, env):
 
 
 def eval_seal_statement(node, env, stack_trace=None):
-    """Evaluate seal statement - mark a variable as sealed (immutable)
+    """Evaluate seal statement - mark a variable or property as sealed (immutable)
 
-    Only identifier targets are supported for simple sealing (e.g. `seal myVar`).
+    Supports sealing identifiers (`seal myVar`) and property access (`seal myMap.key`).
     """
     from .security import SealedObject
 
-    # Only support sealing identifiers for now
-    target = node.target
-    if target is None:
-        return EvaluationError("seal: missing target")
+    target_node = node.target
+    if target_node is None:
+        return EvaluationError("seal: missing target to seal")
 
-    # If target is an Identifier, seal that variable in the environment
-    if isinstance(target, Identifier):
-        name = target.value
-        current = env.get(name)
-        if current is None:
+    # Case 1: Sealing an Identifier (e.g., `seal x`)
+    if isinstance(target_node, Identifier):
+        name = target_node.value
+        current_value = env.get(name)
+        if current_value is None:
             return EvaluationError(f"seal: identifier '{name}' not found")
-        sealed = SealedObject(current)
-        env.set(name, sealed)
+        sealed_object = SealedObject(current_value)
+        env.set(name, sealed_object)
         debug_log("  Sealed identifier", name)
-        return sealed
+        return sealed_object
 
-    # If target is a property access, attempt to seal the referenced value
-    if hasattr(target, 'object') and hasattr(target, 'property'):
-        obj = eval_node(target.object, env, stack_trace)
+    # Case 2: Sealing a PropertyAccessExpression (e.g., `seal obj.prop` or `seal map[key]`)
+    # Note: For `map[key]`, the parser usually creates a `PropertyAccessExpression`
+    # or `IndexExpression` depending on language design. Assuming PropertyAccessExpression for now.
+    elif isinstance(target_node, PropertyAccessExpression):
+        # Evaluate the object part (e.g., `obj` in `obj.prop`)
+        obj = eval_node(target_node.object, env, stack_trace)
         if is_error(obj):
             return obj
-        prop_name = target.property.value
-        # Try maps and entity instances
-        try:
-            # Map-like
-            if isinstance(obj, Map):
-                val = obj.pairs.get(prop_name)
-                if val is None:
-                    return EvaluationError(f"seal: property '{prop_name}' not found")
-                obj.pairs[prop_name] = SealedObject(val)
-                debug_log("  Sealed map property", prop_name)
-                return obj.pairs[prop_name]
-            # EntityInstance-like: try to set via set() API
-            if hasattr(obj, 'set') and hasattr(obj, 'get'):
-                val = obj.get(prop_name)
-                if val is None:
-                    return EvaluationError(f"seal: property '{prop_name}' not found on object")
-                obj.set(prop_name, SealedObject(val))
-                debug_log("  Sealed object property", prop_name)
-                return SealedObject(val)
-        except Exception as e:
-            return EvaluationError(f"seal error: {str(e)}")
 
-    return EvaluationError("seal: unsupported target; use an identifier or property access")
+        # Determine the property name/key
+        # Assuming node.property is an Identifier for 'obj.prop' like access
+        # If it could be an arbitrary expression (like `map[expression]`),
+        # node.property would need to be evaluated further.
+        prop_key_node = target_node.property
+        if isinstance(prop_key_node, Identifier):
+            prop_key = prop_key_node.value
+        else:
+            # Fallback for dynamic keys like map[expr] if PropertyAccessExpression supports it
+            prop_key_evaluated = eval_node(prop_key_node, env, stack_trace)
+            if is_error(prop_key_evaluated):
+                return prop_key_evaluated
+            prop_key = prop_key_evaluated.inspect() # Use inspect to get a string key for maps
+
+        try:
+            # Handle Map objects: seal a specific key's value
+            if isinstance(obj, Map):
+                if prop_key not in obj.pairs:
+                    return EvaluationError(f"seal: map key '{prop_key}' not found on map")
+                # Create a NEW Map with the sealed value, or modify in place if Map allows it.
+                # If Map is mutable, just update:
+                obj.pairs[prop_key] = SealedObject(obj.pairs[prop_key])
+                debug_log(f"  Sealed map key '{prop_key}' for map {obj.inspect()}", "")
+                return obj.pairs[prop_key]
+            # Handle EntityInstance-like objects with get/set methods
+            elif hasattr(obj, 'get') and callable(obj.get) and \
+                 hasattr(obj, 'set') and callable(obj.set):
+                current_prop_value = obj.get(prop_key)
+                if current_prop_value is None:
+                    return EvaluationError(f"seal: property '{prop_key}' not found on object {obj.type()}")
+                sealed_prop_value = SealedObject(current_prop_value)
+                obj.set(prop_key, sealed_prop_value) # This set should trigger immutability check in EntityInstance.set
+                debug_log(f"  Sealed property '{prop_key}' on object {obj.inspect()}", "")
+                return sealed_prop_value
+            else:
+                return EvaluationError(f"seal: cannot seal property '{prop_key}' on object of type {obj.type()}")
+        except Exception as e:
+            return EvaluationError(f"seal error on property '{prop_key}': {str(e)}")
+
+    return EvaluationError("seal: unsupported target type for sealing. Expected Identifier or PropertyAccessExpression.")
+
 
 # Production evaluation with enhanced debugging
 def evaluate(program, env, debug_mode=False):
@@ -1964,7 +2035,7 @@ def evaluate(program, env, debug_mode=False):
             # If summary printing fails, ignore and continue
             pass
 
-    if isinstance(result, (EvaluationError, ObjectEvaluationError)):
+    if is_error(result): # Use is_error helper
         return str(result)
 
     return result
