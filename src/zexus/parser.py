@@ -104,11 +104,11 @@ class UltimateParser:
 
         try:
             self._log("🎯 Starting Tolerant Parsing Pipeline...", "normal")
-            
+
             # Phase 1: Structural Analysis
             all_tokens = self._collect_all_tokens()
             self.block_map = self.structural_analyzer.analyze(all_tokens)
-            
+
             if config.enable_debug_logs:
                 self.structural_analyzer.print_structure()
 
@@ -122,7 +122,7 @@ class UltimateParser:
 
             self._log(f"✅ Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors", "minimal")
             return program
-            
+
         except Exception as e:
             self._log(f"⚠️ Advanced parsing failed, falling back to traditional: {e}", "normal")
             self.use_advanced_parsing = False
@@ -242,7 +242,7 @@ class UltimateParser:
                     if config.enable_debug_logs:  # Only show detailed parsing in verbose mode
                         stmt_type = type(statement).__name__
                         self._log(f"  ✅ Parsed: {stmt_type} at line {block_info['start_token'].line}", "verbose")
-                        
+
             except Exception as e:
                 error_msg = f"Line {block_info['start_token'].line}: {str(e)}"
                 self.errors.append(error_msg)
@@ -813,11 +813,11 @@ class UltimateParser:
         Syntax: seal identifier
         """
         token = self.cur_token
-        
+
         if not self.expect_peek(IDENT):
             self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'seal'")
             return None
-        
+
         target = Identifier(self.cur_token.literal)
         return SealStatement(target=target)
 
@@ -963,6 +963,63 @@ class UltimateParser:
         return WhileStatement(condition=condition, body=body)
 
     def parse_use_statement(self):
+        """Enhanced use statement parser that handles both syntax styles:
+        
+        use '../src/file.zx' as alias
+        use { Name1, Name2 } from './module.zx'
+        """
+        token = self.cur_token
+        
+        # Check for brace syntax: use { Name1, Name2 } from './module.zx'
+        if self.peek_token_is(LBRACE):
+            return self.parse_use_with_braces()
+        else:
+            return self.parse_use_simple()
+
+    def parse_use_with_braces(self):
+        """Parse use statement with brace syntax: use { Name1, Name2 } from './module.zx'"""
+        token = self.cur_token
+        
+        if not self.expect_peek(LBRACE):
+            return None
+        
+        names = []
+        
+        # Parse names inside braces
+        self.next_token()  # Move past {
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            if self.cur_token_is(IDENT):
+                names.append(Identifier(self.cur_token.literal))
+            
+            # Handle commas
+            if self.peek_token_is(COMMA):
+                self.next_token()  # Skip comma
+            elif not self.peek_token_is(RBRACE):
+                # If not comma or closing brace, it's probably an error but try to continue
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ',' or '}}' in use statement")
+                
+            self.next_token()
+        
+        if not self.cur_token_is(RBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' in use statement")
+            return None
+        
+        # Expect 'from' after closing brace
+        if not self.expect_peek(IDENT) or self.cur_token.literal != "from":
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'from' after import names")
+            return None
+        
+        # Expect file path string
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected file path after 'from'")
+            return None
+        
+        file_path = self.cur_token.literal
+        
+        return UseStatement(file_path=file_path, names=names, is_named_import=True)
+
+    def parse_use_simple(self):
+        """Parse simple use statement: use './file.zx' as alias"""
         if not self.expect_peek(STRING):
             self.errors.append("Expected file path after 'use'")
             return None
@@ -978,7 +1035,7 @@ class UltimateParser:
                 return None
             alias = self.cur_token.literal
 
-        return UseStatement(file_path=file_path, alias=alias)
+        return UseStatement(file_path=file_path, alias=alias, is_named_import=False)
 
     def parse_screen_statement(self):
         stmt = ScreenStatement(name=None, body=None)
@@ -1184,54 +1241,83 @@ class UltimateParser:
         return self.parse_brace_block()
 
     def parse_entity_statement(self):
-        """Parse entity declaration
-    
-        entity User {
-            name: string,
-            email: string,
-            role: string = "user"
+        """Parse entity declaration with maximum tolerance
+        
+        Supports:
+        entity ZiverNode {
+            rpc_server: JSONRPCServer
+            ws_server: WebSocketRPCServer
+            // ... other properties
         }
         """
-        if not self.expect_peek(IDENT):
-            return None
-    
-        entity_name = Identifier(self.cur_token.literal)
-    
-        if not self.expect_peek(LBRACE):
-            return None
-    
-        properties = []
-        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-            self.next_token()
-            if self.cur_token_is(RBRACE):
-                break
+        token = self.cur_token
         
-            # Parse property: name: type [= default]
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected entity name after 'entity'")
+            return None
+
+        entity_name = Identifier(self.cur_token.literal)
+
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after entity name")
+            return None
+
+        properties = []
+        
+        # Parse properties until we hit closing brace
+        self.next_token()  # Move past {
+        
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             if self.cur_token_is(IDENT):
                 prop_name = self.cur_token.literal
-            
-                if self.peek_token_is(COLON):
-                    self.next_token()
-                    self.next_token()
+                
+                # Expect colon after property name
+                if not self.expect_peek(COLON):
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ':' after property name '{prop_name}'")
+                    # Try to recover
+                    self.recover_to_next_property()
+                    continue
+                
+                self.next_token()  # Move past colon
+                
+                # Parse property type (can be identifier or built-in type)
+                if self.cur_token_is(IDENT):
                     prop_type = self.cur_token.literal
-                
-                    default_value = None
-                    if self.peek_token_is(ASSIGN):
-                        self.next_token()
-                        self.next_token()
-                        default_value = self.parse_expression(LOWEST)
-                
+                    
                     properties.append({
                         "name": prop_name,
-                        "type": prop_type,
-                        "default_value": default_value
+                        "type": prop_type
                     })
-            
-                if self.peek_token_is(COMMA):
-                    self.next_token()
-    
-        self.expect_peek(RBRACE)
-        return EntityStatement(entity_name, properties)
+                    
+                    # Check for comma or new property
+                    if self.peek_token_is(COMMA):
+                        self.next_token()  # Skip comma
+                    elif not self.peek_token_is(RBRACE) and self.peek_token_is(IDENT):
+                        # Next property, no comma - tolerate this
+                        pass
+                        
+                else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected type for property '{prop_name}'")
+                    self.recover_to_next_property()
+                    continue
+                    
+            self.next_token()
+
+        # Expect closing brace
+        if not self.cur_token_is(RBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' to close entity definition")
+            # Tolerant: continue anyway
+        else:
+            self.next_token()  # Move past }
+
+        return EntityStatement(name=entity_name, properties=properties)
+
+    def recover_to_next_property(self):
+        """Recover to the next property in entity definition"""
+        while (not self.cur_token_is(RBRACE) and 
+               not self.cur_token_is(EOF) and
+               not (self.cur_token_is(IDENT) and self.peek_token_is(COLON))):
+            self.next_token()
 
     def parse_verify_statement(self):
         """Parse verify statement
@@ -1243,24 +1329,24 @@ class UltimateParser:
         """
         if not self.expect_peek(LPAREN):
             return None
-    
+
         self.next_token()
         target = self.parse_expression(LOWEST)
-    
+
         if not self.expect_peek(COMMA):
             return None
-    
+
         self.next_token()
         conditions = []
-    
+
         if self.cur_token_is(LBRACKET):
             conditions = self.parse_expression_list(RBRACKET)
         else:
             conditions.append(self.parse_expression(LOWEST))
-    
+
         if not self.expect_peek(RPAREN):
             return None
-    
+
         return VerifyStatement(target, conditions)
 
     def parse_contract_statement(self):
@@ -1274,21 +1360,21 @@ class UltimateParser:
         """
         if not self.expect_peek(IDENT):
             return None
-    
+
         contract_name = Identifier(self.cur_token.literal)
-    
+
         if not self.expect_peek(LBRACE):
             return None
-    
+
         storage_vars = []
         actions = []
-    
+
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             self.next_token()
-        
+
             if self.cur_token_is(RBRACE):
                 break
-        
+
             # Check for persistent storage declaration
             if self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":
                 self.next_token()
@@ -1297,13 +1383,13 @@ class UltimateParser:
                     if self.cur_token_is(IDENT):
                         storage_name = self.cur_token.literal
                         storage_vars.append({"name": storage_name})
-        
+
             # Check for action definition
             elif self.cur_token_is(ACTION):
                 action = self.parse_action_statement()
                 if action:
                     actions.append(action)
-    
+
         self.expect_peek(RBRACE)
         return ContractStatement(contract_name, storage_vars, actions)
 
@@ -1318,26 +1404,26 @@ class UltimateParser:
         """
         if not self.expect_peek(LPAREN):
             return None
-    
+
         self.next_token()
         target = self.parse_expression(LOWEST)
-    
+
         if not self.expect_peek(COMMA):
             return None
-    
+
         self.next_token()
         rules = self.parse_expression(LOWEST)  # Expect a map literal
-    
+
         enforcement_level = "strict"
         if self.peek_token_is(COMMA):
             self.next_token()
             self.next_token()
             if self.cur_token_is(STRING):
                 enforcement_level = self.cur_token.literal
-    
+
         if not self.expect_peek(RPAREN):
             return None
-    
+
         return ProtectStatement(target, rules, enforcement_level)
 
     def parse_expression_list(self, end):
