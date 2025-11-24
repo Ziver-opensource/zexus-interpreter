@@ -963,11 +963,7 @@ class UltimateParser:
         return WhileStatement(condition=condition, body=body)
 
     def parse_use_statement(self):
-        """Enhanced use statement parser that handles both syntax styles:
-        
-        use '../src/file.zx' as alias
-        use { Name1, Name2 } from './module.zx'
-        """
+        """Enhanced use statement parser that handles multiple syntax styles"""
         token = self.cur_token
         
         # Check for brace syntax: use { Name1, Name2 } from './module.zx'
@@ -979,43 +975,43 @@ class UltimateParser:
     def parse_use_with_braces(self):
         """Parse use statement with brace syntax: use { Name1, Name2 } from './module.zx'"""
         token = self.cur_token
-        
+
         if not self.expect_peek(LBRACE):
             return None
-        
+
         names = []
-        
+
         # Parse names inside braces
         self.next_token()  # Move past {
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             if self.cur_token_is(IDENT):
                 names.append(Identifier(self.cur_token.literal))
-            
+
             # Handle commas
             if self.peek_token_is(COMMA):
                 self.next_token()  # Skip comma
             elif not self.peek_token_is(RBRACE):
                 # If not comma or closing brace, it's probably an error but try to continue
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ',' or '}}' in use statement")
-                
+
             self.next_token()
-        
+
         if not self.cur_token_is(RBRACE):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' in use statement")
             return None
-        
+
         # Expect 'from' after closing brace
         if not self.expect_peek(IDENT) or self.cur_token.literal != "from":
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'from' after import names")
             return None
-        
+
         # Expect file path string
         if not self.expect_peek(STRING):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected file path after 'from'")
             return None
-        
+
         file_path = self.cur_token.literal
-        
+
         return UseStatement(file_path=file_path, names=names, is_named_import=True)
 
     def parse_use_simple(self):
@@ -1251,7 +1247,7 @@ class UltimateParser:
         }
         """
         token = self.cur_token
-        
+
         if not self.expect_peek(IDENT):
             self.errors.append(f"Line {token.line}:{token.column} - Expected entity name after 'entity'")
             return None
@@ -1263,44 +1259,44 @@ class UltimateParser:
             return None
 
         properties = []
-        
+
         # Parse properties until we hit closing brace
         self.next_token()  # Move past {
-        
+
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             if self.cur_token_is(IDENT):
                 prop_name = self.cur_token.literal
-                
+
                 # Expect colon after property name
                 if not self.expect_peek(COLON):
                     self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ':' after property name '{prop_name}'")
                     # Try to recover
                     self.recover_to_next_property()
                     continue
-                
+
                 self.next_token()  # Move past colon
-                
+
                 # Parse property type (can be identifier or built-in type)
                 if self.cur_token_is(IDENT):
                     prop_type = self.cur_token.literal
-                    
+
                     properties.append({
                         "name": prop_name,
                         "type": prop_type
                     })
-                    
+
                     # Check for comma or new property
                     if self.peek_token_is(COMMA):
                         self.next_token()  # Skip comma
                     elif not self.peek_token_is(RBRACE) and self.peek_token_is(IDENT):
                         # Next property, no comma - tolerate this
                         pass
-                        
+
                 else:
                     self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected type for property '{prop_name}'")
                     self.recover_to_next_property()
                     continue
-                    
+
             self.next_token()
 
         # Expect closing brace
